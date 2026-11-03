@@ -19,10 +19,10 @@
   },
 
   "verify": {
-    "format": "ruff format --check .",
-    "lint": "ruff check .",
+    "format": "uv run ruff format --check .",
+    "lint": "uv run ruff check .",
     "typecheck": null,
-    "test": "pytest -q"
+    "test": "uv run pytest -q"
   },
 
   "experiments": {
