@@ -79,8 +79,7 @@ def start_run(cfg: DictConfig, config_path: str) -> tuple[Path, logging.Logger]:
         logger,
         "setup",
         {
-            "git_sha": sha,
-            "git_tree": "dirty" if dirty else "clean",
+            "git_sha": f"{sha} ({'dirty' if dirty else 'clean'})",
             "seed": cfg.seed,
             "device": cfg.device,
             "config": config_path,

@@ -1,3 +1,4 @@
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,4 +24,5 @@ def test_train_creates_run_dir(tmp_path):
     log = (run_dir / "run.log").read_text(encoding="utf-8")
     assert "[setup]" in log
     assert "config: configs/experiment/dummy.yaml" in log
+    assert re.search(r"git_sha: (\w+) \((clean|dirty)\)", log)
     assert not (ROOT / "outputs").exists()
