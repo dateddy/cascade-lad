@@ -1,0 +1,32 @@
+{
+  "_comment": "cascade-lad overrides. Keys not listed fall back to agent-kit defaults (merged per key within each section).",
+
+  "git": {
+    "protected_commit": "ask",
+    "scopes": ["data", "parse", "models", "train", "eval", "llm", "cascade", "demo", "infra", "docs", "exp"],
+    "strict_scopes": false,
+    "max_file_mb": 5
+  },
+
+  "notes": {
+    "dir": "notes",
+    "commit_tasks": false
+  },
+
+  "context": {
+    "_ignore_dirs": "never map datasets, run outputs, caches or notebooks",
+    "ignore_dirs": ["data", "runs", "cache", "notebooks"]
+  },
+
+  "verify": {
+    "format": "ruff format --check .",
+    "lint": "ruff check .",
+    "typecheck": null,
+    "test": "pytest -q"
+  },
+
+  "experiments": {
+    "dir": "experiments",
+    "default_metrics": ["test.precision", "test.recall", "test.f1", "test.fp", "test.fn"]
+  }
+}
