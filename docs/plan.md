@@ -7,7 +7,7 @@ Order rule: follow the data flow, and get one thin end-to-end slice working (PCA
 ---
 
 ## Stage 0: Repo skeleton and run infrastructure
-**Files:** `pyproject.toml` (uv), `.gitignore` (`data/`, `runs/`, `cache/`), `.pre-commit-config.yaml` (ruff), `Makefile` (`data`, `test`, `lint`), `src/cascadelad/__init__.py`, `src/cascadelad/utils/seed.py`, `src/cascadelad/utils/run.py` (create run dir, save config snapshot + git sha with clean/dirty flag, set up logging to console + `run.log`), `src/cascadelad/detectors/base.py` (interface only), `configs/` Hydra skeleton, `scripts/train.py` (minimal).
+**Files:** `pyproject.toml` (uv), `.gitignore` (`data/`, `runs/`, `cache/`), `README.md` (`uv run` commands for test, lint, format, data), `src/cascadelad/__init__.py`, `src/cascadelad/utils/seed.py`, `src/cascadelad/utils/run.py` (create run dir, save config snapshot + git sha with clean/dirty flag, set up logging to console + `run.log`), `src/cascadelad/detectors/base.py` (interface only), `configs/` Hydra skeleton, `scripts/train.py` (minimal).
 
 **Done when:**
 - `python scripts/train.py experiment=dummy run_name=dummy` creates `runs/dummy/` with `config.yaml`, `git_commit.txt`, `run.log`, and the log prints the `[setup]` section.
