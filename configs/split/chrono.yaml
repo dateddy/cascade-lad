@@ -1,0 +1,5 @@
+# @package split
+name: chrono
+train_ratio: 0.7
+val_ratio: 0.1
+test_ratio: 0.2

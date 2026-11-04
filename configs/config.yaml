@@ -2,6 +2,8 @@ defaults:
   - _self_
   - dataset: null
   - parser: null
+  - split: null
+  - vocab: null
   - experiment: null
   - override hydra/job_logging: none
   - override hydra/hydra_logging: none
@@ -13,6 +15,7 @@ overwrite: false
 
 paths:
   runs_dir: runs
+  processed_dir: data/processed
 
 hydra:
   run:

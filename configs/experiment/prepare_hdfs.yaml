@@ -1,0 +1,8 @@
+# @package _global_
+defaults:
+  - override /dataset: hdfs
+  - override /parser: drain
+  - override /split: chrono
+  - override /vocab: default
+
+note: prepare_hdfs
