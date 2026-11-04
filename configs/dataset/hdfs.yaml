@@ -12,3 +12,10 @@ block_column: BlockId
 label_map:
   Normal: 0
   Anomaly: 1
+zenodo:
+  record: 8196385
+  filename: HDFS_v1.zip
+  url: https://zenodo.org/api/records/8196385/files/HDFS_v1.zip/content
+  md5: 76a24b4d9a6164d543fb275f89773260
+download:
+  chunk_bytes: 1048576
