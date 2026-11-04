@@ -32,7 +32,35 @@ def _safe_members(zf: zipfile.ZipFile, raw_dir: Path) -> list[str]:
     return names
 
 
+def fetch_files(cfg: Mapping) -> Path:
+    """Download plain files listed in cfg["files"], each checked against its md5."""
+    raw_dir = Path(cfg["raw_dir"])
+    chunk = cfg["download"]["chunk_bytes"]
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    for entry in cfg["files"]:
+        target = raw_dir / entry["filename"]
+        if target.exists():
+            logger.info("already present: %s", target)
+            continue
+        part = target.with_name(target.name + ".part")
+        try:
+            with urllib.request.urlopen(entry["url"]) as resp, open(part, "wb") as out:
+                shutil.copyfileobj(resp, out, chunk)
+            got = md5sum(part, chunk)
+            if got != entry["md5"]:
+                raise ValueError(
+                    f"md5 mismatch for {entry['filename']}: expected {entry['md5']}, got {got}"
+                )
+            part.rename(target)
+        finally:
+            part.unlink(missing_ok=True)
+        logger.info("downloaded %s into %s", entry["filename"], raw_dir)
+    return raw_dir
+
+
 def fetch_dataset(cfg: Mapping) -> Path:
+    if "files" in cfg:
+        return fetch_files(cfg)
     raw_dir = Path(cfg["raw_dir"])
     if (raw_dir / cfg["log_file"]).exists() and (raw_dir / cfg["label_file"]).exists():
         logger.info("already present in %s, nothing to download", raw_dir)

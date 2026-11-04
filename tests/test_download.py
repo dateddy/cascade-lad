@@ -64,3 +64,38 @@ def test_unsafe_member_raises(tmp_path):
     with pytest.raises(ValueError, match="unsafe path"):
         fetch_dataset(cfg)
     assert not (tmp_path / "evil").exists()
+
+
+def make_files_cfg(tmp_path: Path, md5s: dict[str, str] | None = None) -> dict:
+    src = tmp_path / "src"
+    src.mkdir()
+    entries = []
+    for name, text in {"a.log": "alpha\n", "b.csv": "x,y\n"}.items():
+        (src / name).write_bytes(text.encode())
+        md5 = hashlib.md5(text.encode()).hexdigest()
+        entries.append(
+            {"filename": name, "url": (src / name).as_uri(), "md5": (md5s or {}).get(name, md5)}
+        )
+    return {"raw_dir": str(tmp_path / "raw"), "files": entries, "download": {"chunk_bytes": 4}}
+
+
+def test_files_download_lands_in_raw_dir(tmp_path):
+    raw = fetch_dataset(make_files_cfg(tmp_path))
+    assert (raw / "a.log").read_text() == "alpha\n"
+    assert (raw / "b.csv").read_text() == "x,y\n"
+    assert not list(raw.glob("*.part"))
+
+
+def test_files_md5_mismatch_raises_and_leaves_no_file(tmp_path):
+    cfg = make_files_cfg(tmp_path, {"a.log": "0" * 32})
+    with pytest.raises(ValueError, match="md5 mismatch"):
+        fetch_dataset(cfg)
+    assert list(Path(cfg["raw_dir"]).iterdir()) == []
+
+
+def test_files_second_call_does_not_touch_url(tmp_path):
+    cfg = make_files_cfg(tmp_path)
+    fetch_dataset(cfg)
+    for entry in cfg["files"]:
+        entry["url"] = (tmp_path / "missing").as_uri()
+    fetch_dataset(cfg)

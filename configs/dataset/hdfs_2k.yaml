@@ -1,0 +1,18 @@
+# @package dataset
+name: hdfs_2k
+raw_dir: data/raw/hdfs_2k
+log_file: HDFS_2k.log
+structured_file: HDFS_2k.log_structured.csv
+# must match configs/dataset/hdfs.yaml
+line_regex: '^(?P<date>\d{6}) (?P<time>\d{6}) (?P<pid>\d+) (?P<level>\w+) (?P<component>[^:]+): (?P<content>.*)$'
+content_column: Content
+event_column: EventId
+files:
+  - filename: HDFS_2k.log
+    url: https://raw.githubusercontent.com/logpai/loghub/374038faa4ca122dd7ca0730372c0b78f76f8597/HDFS/HDFS_2k.log
+    md5: b047f441fa3506b318f9410fa4b189db
+  - filename: HDFS_2k.log_structured.csv
+    url: https://raw.githubusercontent.com/logpai/loghub/374038faa4ca122dd7ca0730372c0b78f76f8597/HDFS/HDFS_2k.log_structured.csv
+    md5: 5cde5d710c63c13e2cf7fff49d7f2a77
+download:
+  chunk_bytes: 1048576
