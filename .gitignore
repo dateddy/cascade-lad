@@ -2,9 +2,9 @@
 /notes/tasks/
 
 # build, runs and caches
-data/
-runs/
-cache/
+/data/
+/runs/
+/cache/
 outputs/
 multirun/
 .venv/

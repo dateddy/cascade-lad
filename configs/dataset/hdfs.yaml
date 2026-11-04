@@ -1,0 +1,21 @@
+# @package dataset
+name: hdfs
+raw_dir: data/raw/hdfs
+log_file: HDFS.log
+label_file: preprocessed/anomaly_label.csv
+max_lines: 100000  # first N lines in file order; null = all lines
+line_regex: '^(?P<date>\d{6}) (?P<time>\d{6}) (?P<pid>\d+) (?P<level>\w+) (?P<component>[^:]+): (?P<content>.*)$'
+timestamp_format: '%y%m%d %H%M%S'
+block_regex: 'blk_-?\d+'
+label_column: Label
+block_column: BlockId
+label_map:
+  Normal: 0
+  Anomaly: 1
+zenodo:
+  record: 8196385
+  filename: HDFS_v1.zip
+  url: https://zenodo.org/api/records/8196385/files/HDFS_v1.zip/content
+  md5: 76a24b4d9a6164d543fb275f89773260
+download:
+  chunk_bytes: 1048576
