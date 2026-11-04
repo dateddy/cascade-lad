@@ -1,0 +1,14 @@
+# @package dataset
+name: hdfs
+raw_dir: data/raw/hdfs
+log_file: HDFS.log
+label_file: anomaly_label.csv
+max_lines: 100000  # first N lines in file order; null = all lines
+line_regex: '^(?P<date>\d{6}) (?P<time>\d{6}) (?P<pid>\d+) (?P<level>\w+) (?P<component>[^:]+): (?P<content>.*)$'
+timestamp_format: '%y%m%d %H%M%S'
+block_regex: 'blk_-?\d+'
+label_column: Label
+block_column: BlockId
+label_map:
+  Normal: 0
+  Anomaly: 1
