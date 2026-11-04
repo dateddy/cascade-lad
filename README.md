@@ -15,6 +15,7 @@ uv run python scripts/train.py experiment=dummy run_name=dummy   # smoke run, wr
 uv run python scripts/download_data.py dataset=hdfs run_name=download   # fetch HDFS_v1 into data/raw/hdfs/ (md5-checked)
 uv run python scripts/download_data.py dataset=hdfs_2k run_name=download   # HDFS_2k sample + Loghub ground truth
 uv run python scripts/check_parser.py dataset=hdfs_2k parser=drain run_name=parser-check   # Drain grouping accuracy on HDFS_2k
+uv run python scripts/prepare_data.py experiment=prepare_hdfs run_name=hdfs-prepare   # group, split chronologically, build vocab -> data/processed/<hash>/
 ```
 
 
