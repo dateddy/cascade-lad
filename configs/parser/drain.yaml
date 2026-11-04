@@ -1,0 +1,14 @@
+# @package parser
+name: drain
+depth: 4
+sim_th: 0.5
+max_children: 100
+max_clusters: null
+parametrize_numeric_tokens: true
+extra_delimiters: []
+masking:
+  - {regex: 'blk_-?\d+', mask_with: BLK}
+  - {regex: '(\d+\.){3}\d+(:\d+)?', mask_with: IP}
+match_strategy: fallback
+unk_token: '<UNK>'
+parsed_dir: data/parsed

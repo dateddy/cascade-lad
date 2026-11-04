@@ -15,3 +15,7 @@ Supersedes: D-7a93
 ## D-7362 · 2026-11-03 · tooling · feat/stage-0-skeleton
 No Makefile and no .pre-commit-config.yaml; commands documented in README as uv run ...; agent-kit git hooks plus vf are the gate
 Why: Kit hooks and vf already cover lint/format/tests; make is not available on the Windows dev machine
+
+## D-26b9 · 2026-11-04 · parsing · feat/stage-2-parsing
+Drain via drain3; parser API is fit(train contents) + transform(any contents, match only, unmatched -> <UNK>)
+Why: Invariant 2: templates fit on train only; drain3 match() does not update the tree
