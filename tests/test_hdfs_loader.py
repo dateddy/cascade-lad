@@ -22,6 +22,7 @@ def make_cfg(tmp_path: Path, **overrides):
     (tmp_path / "anomaly_label.csv").write_text(LABELS, encoding="utf-8")
     cfg = OmegaConf.load(Path(__file__).parents[1] / "configs" / "dataset" / "hdfs.yaml")
     cfg.raw_dir = str(tmp_path)
+    cfg.label_file = "anomaly_label.csv"  # flat fixture layout; the real config uses preprocessed/
     cfg.update(overrides)
     return OmegaConf.to_container(cfg, resolve=True)
 

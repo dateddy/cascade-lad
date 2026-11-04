@@ -17,3 +17,18 @@ uv run python scripts/download_data.py dataset=hdfs run_name=download   # fetch 
 
 
 Before committing, run the full gate: `python .agentkit/skills/verifying-changes/scripts/verify.py`.
+
+## Data
+
+`uv run python scripts/download_data.py dataset=hdfs run_name=download` downloads HDFS_v1 from Zenodo
+(record 8196385), checks the pinned md5 and extracts it. Existing files are never overwritten; a second
+run does nothing. Layout:
+
+```
+data/raw/hdfs/
+  HDFS.log
+  preprocessed/anomaly_label.csv   # BlockId,Label (Normal/Anomaly)
+```
+
+`get_loader("hdfs", cfg.dataset).load()` returns `timestamp, content, group_id, label`, one row per
+(log line, block id), reading the first `max_lines` lines (default 100000, `null` = all).
