@@ -106,6 +106,7 @@ def test_second_run_is_cache_hit_without_loading(tmp_path, monkeypatch, caplog):
     logger = logging.getLogger("test_prepare_hit")
     caplog.set_level(logging.INFO, logger="test_prepare_hit")
     first = prepare(cfg, logger)
+    miss_unk = [ln for ln in caplog.text.splitlines() if "test unk rate:" in ln]
 
     def boom(*args, **kwargs):
         raise AssertionError("loader called on processed cache hit")
@@ -114,7 +115,10 @@ def test_second_run_is_cache_hit_without_loading(tmp_path, monkeypatch, caplog):
     caplog.clear()
     assert prepare(cfg, logger) == first
     assert "processed cache: hit" in caplog.text
+    assert "parse cache: not run" in caplog.text
+    assert "groups train: 5" in caplog.text
     assert "vocab size:" in caplog.text
+    assert [ln for ln in caplog.text.splitlines() if "test unk rate:" in ln] == miss_unk
     assert json.loads((first / "meta.json").read_text())["key"] == processed_key(cfg)
 
 
@@ -125,3 +129,92 @@ def test_key_ignores_parsed_dir_but_not_split(tmp_path):
     assert processed_key(other_dir) == key
     other_split = {**cfg, "split": {**cfg["split"], "train_ratio": 0.6, "test_ratio": 0.3}}
     assert processed_key(other_split) != key
+
+
+def edit_raw(cfg: dict, name: str, old: str, new: str, *, last: bool = False) -> None:
+    path = Path(cfg["dataset"]["raw_dir"]) / name
+    text = path.read_text(encoding="utf-8")
+    assert old in text
+    if last:
+        head, _, tail = text.rpartition(old)
+        text = head + new + tail
+    else:
+        text = text.replace(old, new, 1)
+    path.write_text(text, encoding="utf-8")
+
+
+def test_key_changes_with_data_code(tmp_path, monkeypatch):
+    cfg = make_cfg(tmp_path)
+    key = processed_key(cfg)
+    monkeypatch.setattr(prepare_mod, "source_hash", lambda: "other-code")
+    assert processed_key(cfg) != key
+
+
+def test_key_changes_with_drain3_version(tmp_path, monkeypatch):
+    cfg = make_cfg(tmp_path)
+    key = processed_key(cfg)
+    monkeypatch.setattr(prepare_mod, "drain3_version", lambda: "0.0.0-other")
+    assert processed_key(cfg) != key
+
+
+def test_key_changes_when_raw_log_edited_or_truncated(tmp_path):
+    cfg = make_cfg(tmp_path)
+    key = processed_key(cfg)
+    edit_raw(cfg, "HDFS.log", "size 5", "size 6")  # same length, different bytes
+    edited = processed_key(cfg)
+    assert edited != key
+    log = Path(cfg["dataset"]["raw_dir"]) / "HDFS.log"
+    lines = log.read_text(encoding="utf-8").splitlines(keepends=True)
+    log.write_text("".join(lines[:-1]), encoding="utf-8")
+    assert processed_key(cfg) != edited
+
+
+def test_key_changes_when_label_file_edited(tmp_path):
+    cfg = make_cfg(tmp_path)
+    key = processed_key(cfg)
+    edit_raw(cfg, "anomaly_label.csv", "blk_0,Normal", "blk_0,Anomaly")
+    assert processed_key(cfg) != key
+
+
+def test_key_ignores_lines_past_max_lines_but_not_size(tmp_path):
+    cfg = make_cfg(tmp_path)
+    cfg["dataset"]["max_lines"] = 2
+    key = processed_key(cfg)
+    edit_raw(cfg, "HDFS.log", "file x", "file y", last=True)  # same size, past line 2
+    assert processed_key(cfg) == key
+    log = Path(cfg["dataset"]["raw_dir"]) / "HDFS.log"
+    with open(log, "a", encoding="utf-8") as f:
+        f.write("081109 230000 1 INFO dfs.DataNode: extra line blk_0\n")
+    assert processed_key(cfg) != key
+
+
+def test_stale_cache_not_reused_after_raw_change(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    logger = logging.getLogger("test_prepare_stale")
+    caplog.set_level(logging.INFO, logger="test_prepare_stale")
+    first = prepare(cfg, logger)
+    edit_raw(cfg, "HDFS.log", "size 5", "size 6")
+    caplog.clear()
+    second = prepare(cfg, logger)
+    assert second != first
+    assert "processed cache: miss" in caplog.text
+
+
+def test_hit_stats_come_from_files_not_meta(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    logger = logging.getLogger("test_prepare_meta")
+    caplog.set_level(logging.INFO, logger="test_prepare_meta")
+    out = prepare(cfg, logger)
+    real_vocab = Vocab.from_json(out / "vocab.json").size
+
+    meta_path = out / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["stats"].update({"vocab size": 999, "parse cache": "miss", "groups train": 999})
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    caplog.clear()
+    prepare(cfg, logger)
+    assert f"vocab size: {real_vocab}" in caplog.text
+    assert "999" not in caplog.text
+    assert "parse cache: not run" in caplog.text
+    assert "parse cache: miss" not in caplog.text

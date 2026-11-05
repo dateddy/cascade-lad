@@ -5,13 +5,14 @@ import json
 import logging
 import shutil
 from collections.abc import Mapping
+from itertools import islice
 from pathlib import Path
 
 import pandas as pd
 
 from cascadelad.data.grouping import build_windows, session_bounds
 from cascadelad.data.loaders import get_loader
-from cascadelad.data.parsing import parse_cached
+from cascadelad.data.parsing import drain3_version, parse_cached, source_hash
 from cascadelad.data.splitting import chronological_split
 from cascadelad.data.vocab import Vocab
 from cascadelad.utils.run import log_section
@@ -19,28 +20,82 @@ from cascadelad.utils.run import log_section
 SPLITS = ("train", "val", "test")
 OUT_COLUMNS = ["group_id", "event_ids", "timestamp", "label"]
 OUT_FILES = (*(f"{s}.parquet" for s in SPLITS), "vocab.json", "meta.json")
+HASH_CHUNK_BYTES = 1 << 20
 
 
-def processed_key(cfg: Mapping) -> str:
-    """Hash of the dataset, parser (minus parsed_dir), split and vocab configs."""
-    parts = {
+def _file_md5(path: Path, max_lines: int | None = None) -> dict:
+    """Size and md5 of a file, or of its first max_lines lines (None = whole file)."""
+    h = hashlib.md5()  # noqa: S324 - fingerprint, not security
+    with open(path, "rb") as f:
+        if max_lines is None:
+            for chunk in iter(lambda: f.read(HASH_CHUNK_BYTES), b""):
+                h.update(chunk)
+        else:
+            for line in islice(f, max_lines):
+                h.update(line)
+    return {"size": path.stat().st_size, "md5": h.hexdigest()}
+
+
+def raw_fingerprint(dataset_cfg: Mapping) -> dict:
+    """Fingerprint of the raw files a load reads: the first max_lines of the log, the labels."""
+    raw_dir = Path(dataset_cfg["raw_dir"])
+    out = {"log_file": _file_md5(raw_dir / dataset_cfg["log_file"], dataset_cfg.get("max_lines"))}
+    if dataset_cfg.get("label_file"):
+        out["label_file"] = _file_md5(raw_dir / dataset_cfg["label_file"])
+    return out
+
+
+def _key_parts(cfg: Mapping) -> dict:
+    return {
         "dataset": cfg["dataset"],
         "parser": {k: v for k, v in cfg["parser"].items() if k != "parsed_dir"},
         "split": cfg["split"],
         "vocab": cfg["vocab"],
+        "code": source_hash(),
+        "raw": raw_fingerprint(cfg["dataset"]),
+        "drain3": drain3_version(),
     }
+
+
+def _hash_parts(parts: Mapping) -> str:
     blob = json.dumps(parts, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
+def processed_key(cfg: Mapping) -> str:
+    """Hash of the configs (parser minus parsed_dir), data code, raw files and drain3 version."""
+    return _hash_parts(_key_parts(cfg))
+
+
+def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
+    """[data] stats of this run on a cache hit, recomputed from the cached files.
+
+    Build-time counts (purged, anomalous dropped) are not stored in the outputs, so they are
+    left out instead of replayed from meta.json.
+    """
+    frames = {s: pd.read_parquet(out_dir / f"{s}.parquet") for s in SPLITS}
+    vocab = Vocab.from_json(out_dir / "vocab.json")
+    test_ids = [e for ids in frames["test"]["event_ids"] for e in ids]
+    return {
+        "raw_dir": cfg["dataset"]["raw_dir"],
+        "processed key": key,
+        "processed dir": out_dir,
+        "processed cache": "hit",
+        "parse cache": "not run",
+        **{f"groups {s}": len(frames[s]) for s in SPLITS},
+        **{f"anomaly % {s}": f"{100 * frames[s]['label'].mean():.2f}" for s in SPLITS},
+        "vocab size": vocab.size,
+        "test unk rate": f"{sum(e == vocab.unk_id for e in test_ids) / len(test_ids):.4f}",
+    }
+
+
 def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
     """Build (or reuse) the processed dataset and return its directory."""
-    key = processed_key(cfg)
+    key_parts = _key_parts(cfg)
+    key = _hash_parts(key_parts)
     out_dir = Path(cfg["paths"]["processed_dir"]) / key
     if all((out_dir / f).exists() for f in OUT_FILES):
-        stats = json.loads((out_dir / "meta.json").read_text(encoding="utf-8"))["stats"]
-        stats["processed cache"] = "hit"
-        log_section(logger, "data", stats)
+        log_section(logger, "data", _hit_stats(cfg, key, out_dir))
         return out_dir
 
     lines = get_loader(cfg["dataset"]["name"], cfg["dataset"]).load()
@@ -66,6 +121,7 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
     stats = {
         "raw_dir": cfg["dataset"]["raw_dir"],
         "processed key": key,
+        "processed dir": out_dir,
         "processed cache": "miss",
         "parse cache": "hit" if parse_hit else "miss",
         **{f"groups {s}": len(windows[s]) for s in SPLITS},
@@ -86,6 +142,7 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
     vocab.to_json(tmp_dir / "vocab.json")
     meta = {
         "key": key,
+        "key_parts": key_parts,
         "stats": stats,
         "cfg": {k: cfg[k] for k in ("dataset", "parser", "split", "vocab")},
     }

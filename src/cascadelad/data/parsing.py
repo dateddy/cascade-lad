@@ -73,12 +73,29 @@ def grouping_accuracy(pred: Sequence[str], truth: Sequence[str]) -> float:
 
 
 CACHE_FILES = ("assignments.csv", "templates.json", "meta.json")
+DATA_DIR = Path(__file__).resolve().parent
+
+
+def source_hash(root: Path = DATA_DIR) -> str:
+    """Hash of every .py file under root (path + bytes), so editing data code changes cache keys."""
+    h = hashlib.sha256()
+    for path in sorted(root.rglob("*.py"), key=lambda p: p.relative_to(root).as_posix()):
+        body = path.read_bytes()
+        h.update(f"{path.relative_to(root).as_posix()}\0{len(body)}\0".encode())
+        h.update(body)
+    return h.hexdigest()[:16]
+
+
+def drain3_version() -> str:
+    return importlib.metadata.version("drain3")
 
 
 def cache_key(cfg: Mapping, fit_contents: Sequence[str], apply_contents: Sequence[str]) -> str:
-    """Hash of the parser config (minus parsed_dir) and both content lists."""
+    """Hash of parser config (minus parsed_dir), data code, drain3 version and both contents."""
     h = hashlib.sha256()
     cfg_part = {k: v for k, v in cfg.items() if k != "parsed_dir"}
+    cfg_part["_code"] = source_hash()
+    cfg_part["_drain3"] = drain3_version()
     h.update(json.dumps(cfg_part, sort_keys=True, default=str).encode("utf-8"))
     for section in (fit_contents, apply_contents):
         body = "\n".join(section).encode("utf-8")
@@ -115,7 +132,8 @@ def parse_cached(
         "n_apply": len(unique_apply),
         "n_templates": len(templates),
         "n_unk": int((assignments["template_id"] == cfg["unk_token"]).sum()),
-        "drain3_version": importlib.metadata.version("drain3"),
+        "drain3_version": drain3_version(),
+        "code_hash": source_hash(),
         "cfg": dict(cfg),
     }
     tmp_dir = cache_dir.with_name(cache_dir.name + ".tmp")
