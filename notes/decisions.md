@@ -31,3 +31,27 @@ Why: Invariants 2 and 3: fit only on what the detector trains on
 ## D-ea3b · 2026-11-04 · tooling · feat/stage-3-grouping-split-vocab
 pyarrow added as a dependency for parquet outputs
 Why: docs/plan.md and AGENTS.md specify parquet for processed data and scores
+
+## D-2e83 · 2026-11-05 · caching · feat/stage-3-grouping-split-vocab
+processed_key (and parse cache key) must include: hash of src/cascadelad/data/ source files, raw file fingerprint (size + md5 of the part read), drain3 version. On a cache hit, [data] must log the real state of this run, not replay meta.json stats. Implementation waits until the user finishes setup; then plan it.
+Why: Verified 2026-11-05: changing splitting code or truncating HDFS.log kept the same key and silently returned stale processed data (cache hit, git_commit.txt pointing at the new commit).
+
+## D-b52f · 2026-11-05 · data · feat/stage-3-grouping-split-vocab
+The max_lines slice (default 100k) is only a smoke test for pipeline and baseline runs (data flows end to end). Its metrics are never main results or interpreted. Slice size may be changed per baseline model. Main results use full data.
+Why: On 100k lines train spans ~9 min, <UNK> comes from lifecycle phase (first Deleting block at 20:45:24 > t_val), val has 18 anomalies, test tail blocks are truncated but keep full-block labels.
+
+## D-093f · 2026-11-05 · terminology · feat/stage-3-grouping-split-vocab
+Keep the term unsupervised in spec for now (spec 1.2, RQ3). Revisit after the model architecture is decided. Known tension: train is filtered to normal blocks with labels (invariant 3, D-8314), which the literature calls semi-supervised; retrieval pool drawn from filtered train would leak labels into RQ3.
+Why: User has not decided the model architecture yet; wording follows architecture.
+
+## D-bf45 · 2026-11-05 · ablation · feat/stage-3-grouping-split-vocab
+Deferred until PCA and DeepLog run on full HDFS (Stage 6-7): contamination ablation with a YAML flag (e.g. split.train_normal_only) training on all train blocks without label filtering. Whether to run it stays open. Touches splitting and invariant 3: needs explicit user yes.
+Why: Supports or refutes the unsupervised claim; not needed before baselines exist.
+
+## D-149b · 2026-11-05 · evaluation · feat/stage-3-grouping-split-vocab
+Deferred to Stage 7, before any RQ4 work: on full HDFS check correlation between <UNK> in a test session and its label; if present report F1 split by with/without <UNK>. RQ4 needs real log evolution (BGL per spec, or synthetic template changes in LogRobust style); HDFS_v1 is one software version, so its <UNK> is not evidence of evolution.
+Why: On 100k slice <UNK> came from lifecycle phase (Deleting block), not code change; a UNK-label correlation would inflate detector F1.
+
+## D-9417 · 2026-11-05 · evaluation · feat/stage-3-grouping-split-vocab
+Open, proposed defaults (not decided): unit of evaluation = session (block); threshold = max F1 on val, same procedure for every method (invariant 5); PCA input = per-session template count vector; DeepLog session score = max over windows of -log p(actual next key). Decide each at its stage (4, 5, 6) after explanation.
+Why: User wants to decide when building models with enough background; recorded so defaults are not adopted silently.
