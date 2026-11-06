@@ -1,0 +1,4 @@
+# @package vocab
+pad_token: '<PAD>'
+unk_token: ${parser.unk_token}
+min_count: 1

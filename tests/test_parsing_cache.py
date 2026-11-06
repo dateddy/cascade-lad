@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 from omegaconf import OmegaConf
 
-from cascadelad.data.parsing import DrainParser, cache_key, parse_cached
+from cascadelad.data import parsing
+from cascadelad.data.parsing import DrainParser, cache_key, parse_cached, source_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 LINES = [
@@ -47,6 +48,31 @@ def test_key_depends_on_cfg_and_fit_contents_not_parsed_dir(tmp_path):
     assert cache_key(cfg_for(tmp_path, sim_th=0.9), LINES, LINES) != key
     assert cache_key(base, LINES[:2], LINES) != key
     assert cache_key(cfg_for(tmp_path, parsed_dir="elsewhere"), LINES, LINES) == key
+
+
+def test_source_hash_tracks_nested_py_files(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "sub" / "b.py").write_text("y = 2\n", encoding="utf-8")
+    base = source_hash(tmp_path)
+    (tmp_path / "notes.txt").write_text("ignored", encoding="utf-8")
+    assert source_hash(tmp_path) == base
+    (tmp_path / "sub" / "b.py").write_text("y = 3\n", encoding="utf-8")
+    assert source_hash(tmp_path) != base
+
+
+def test_key_changes_with_code_hash(tmp_path, monkeypatch):
+    cfg = cfg_for(tmp_path)
+    key = cache_key(cfg, LINES, LINES)
+    monkeypatch.setattr(parsing, "source_hash", lambda: "other-code")
+    assert cache_key(cfg, LINES, LINES) != key
+
+
+def test_key_changes_with_drain3_version(tmp_path, monkeypatch):
+    cfg = cfg_for(tmp_path)
+    key = cache_key(cfg, LINES, LINES)
+    monkeypatch.setattr(parsing, "drain3_version", lambda: "0.0.0-other")
+    assert cache_key(cfg, LINES, LINES) != key
 
 
 def test_key_section_boundary_is_unambiguous(tmp_path):
