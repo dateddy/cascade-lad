@@ -21,19 +21,24 @@ SPLITS = ("train", "val", "test")
 OUT_COLUMNS = ["group_id", "event_ids", "timestamp", "label"]
 OUT_FILES = (*(f"{s}.parquet" for s in SPLITS), "vocab.json", "meta.json")
 HASH_CHUNK_BYTES = 1 << 20
+BUILD_STATS = ("purged train", "purged val", "train anomalous dropped")
 
 
 def _file_md5(path: Path, max_lines: int | None = None) -> dict:
-    """Size and md5 of a file, or of its first max_lines lines (None = whole file)."""
+    """Size and md5 of a file, or md5 of only its first max_lines lines (None = whole file).
+
+    With max_lines the size is left out: lines past max_lines are never read, so they must not
+    change the key.
+    """
     h = hashlib.md5()  # noqa: S324 - fingerprint, not security
     with open(path, "rb") as f:
         if max_lines is None:
             for chunk in iter(lambda: f.read(HASH_CHUNK_BYTES), b""):
                 h.update(chunk)
-        else:
-            for line in islice(f, max_lines):
-                h.update(line)
-    return {"size": path.stat().st_size, "md5": h.hexdigest()}
+            return {"size": path.stat().st_size, "md5": h.hexdigest()}
+        for line in islice(f, max_lines):
+            h.update(line)
+    return {"md5": h.hexdigest()}
 
 
 def raw_fingerprint(dataset_cfg: Mapping) -> dict:
@@ -70,12 +75,13 @@ def processed_key(cfg: Mapping) -> str:
 def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
     """[data] stats of this run on a cache hit, recomputed from the cached files.
 
-    Build-time counts (purged, anomalous dropped) are not stored in the outputs, so they are
-    left out instead of replayed from meta.json.
+    Build-time counts (purged, anomalous dropped) are not in the outputs, so they come from
+    meta.json, which is written with the outputs, and are labeled "(from build)".
     """
     frames = {s: pd.read_parquet(out_dir / f"{s}.parquet") for s in SPLITS}
     vocab = Vocab.from_json(out_dir / "vocab.json")
     test_ids = [e for ids in frames["test"]["event_ids"] for e in ids]
+    build = json.loads((out_dir / "meta.json").read_text(encoding="utf-8"))["stats"]
     return {
         "raw_dir": cfg["dataset"]["raw_dir"],
         "processed key": key,
@@ -83,6 +89,7 @@ def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
         "processed cache": "hit",
         "parse cache": "not run",
         **{f"groups {s}": len(frames[s]) for s in SPLITS},
+        **{f"{k} (from build)": build[k] for k in BUILD_STATS},
         **{f"anomaly % {s}": f"{100 * frames[s]['label'].mean():.2f}" for s in SPLITS},
         "vocab size": vocab.size,
         "test unk rate": f"{sum(e == vocab.unk_id for e in test_ids) / len(test_ids):.4f}",

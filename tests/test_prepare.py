@@ -117,6 +117,8 @@ def test_second_run_is_cache_hit_without_loading(tmp_path, monkeypatch, caplog):
     assert "processed cache: hit" in caplog.text
     assert "parse cache: not run" in caplog.text
     assert "groups train: 5" in caplog.text
+    for name in ("purged train", "purged val", "train anomalous dropped"):
+        assert f"{name} (from build):" in caplog.text
     assert "vocab size:" in caplog.text
     assert [ln for ln in caplog.text.splitlines() if "test unk rate:" in ln] == miss_unk
     assert json.loads((first / "meta.json").read_text())["key"] == processed_key(cfg)
@@ -176,15 +178,29 @@ def test_key_changes_when_label_file_edited(tmp_path):
     assert processed_key(cfg) != key
 
 
-def test_key_ignores_lines_past_max_lines_but_not_size(tmp_path):
+def test_key_ignores_lines_past_max_lines(tmp_path):
     cfg = make_cfg(tmp_path)
     cfg["dataset"]["max_lines"] = 2
     key = processed_key(cfg)
-    edit_raw(cfg, "HDFS.log", "file x", "file y", last=True)  # same size, past line 2
+    edit_raw(cfg, "HDFS.log", "file x", "file y", last=True)  # past line 2
     assert processed_key(cfg) == key
     log = Path(cfg["dataset"]["raw_dir"]) / "HDFS.log"
     with open(log, "a", encoding="utf-8") as f:
         f.write("081109 230000 1 INFO dfs.DataNode: extra line blk_0\n")
+    assert processed_key(cfg) == key
+    lines = log.read_text(encoding="utf-8").splitlines(keepends=True)
+    log.write_text("".join(lines[:3]), encoding="utf-8")  # truncated, first 2 lines kept
+    assert processed_key(cfg) == key
+
+
+def test_key_changes_when_line_within_max_lines_edited(tmp_path):
+    cfg = make_cfg(tmp_path)
+    cfg["dataset"]["max_lines"] = 2
+    key = processed_key(cfg)
+    log = Path(cfg["dataset"]["raw_dir"]) / "HDFS.log"
+    lines = log.read_text(encoding="utf-8").splitlines(keepends=True)
+    lines[1] = lines[1].replace("INFO", "WARN", 1)
+    log.write_text("".join(lines), encoding="utf-8")
     assert processed_key(cfg) != key
 
 
