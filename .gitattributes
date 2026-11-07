@@ -1,3 +1,5 @@
 notes/decisions.md merge=union
 notes/debug.jsonl merge=union
 experiments/runs.jsonl merge=union
+FAILURES.md merge=union
+.agentkit/scripts/** text eol=lf

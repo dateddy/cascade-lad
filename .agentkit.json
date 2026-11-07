@@ -2,6 +2,7 @@
   "_comment": "cascade-lad overrides. Keys not listed fall back to agent-kit defaults (merged per key within each section).",
 
   "git": {
+    "protected_branches": ["main"],
     "protected_commit": "ask",
     "scopes": ["data", "parse", "models", "train", "eval", "llm", "cascade", "demo", "infra", "docs", "exp"],
     "strict_scopes": false,
@@ -23,6 +24,16 @@
     "lint": "uv run ruff check .",
     "typecheck": null,
     "test": "uv run pytest -q"
+  },
+
+  "guards": {
+    "_comment": "Stop hook (verify.sh --hook): lint + scope only. pre-push (verify.sh --push): tests + diff-cover only.",
+    "ruff_cmd": "uv run ruff",
+    "pytest_cmd": "uv run pytest",
+    "diff_cover_cmd": "uv run diff-cover",
+    "hook_stages": ["lint", "scope"],
+    "push_stages": ["tests", "diff-cover"],
+    "fail_under": 80
   },
 
   "experiments": {
