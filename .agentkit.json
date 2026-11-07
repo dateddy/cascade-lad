@@ -4,7 +4,7 @@
   "git": {
     "protected_branches": ["main"],
     "protected_commit": "ask",
-    "scopes": ["data", "parse", "models", "train", "eval", "llm", "cascade", "demo", "infra", "docs", "exp"],
+    "scopes": ["data", "parse", "models", "train", "eval", "llm", "cascade", "demo", "infra", "docs", "exp", "agent-kit"],
     "strict_scopes": false,
     "max_file_mb": 5
   },
