@@ -117,3 +117,16 @@ Why: User review 2026-11-06: safety over recompute cost; empty test split cannot
 ## D-23c3 · 2026-11-06 · caching · fix/cache-keys-include-data-code-raw-fingerp
 Closes D-e14d open points. (2) With max_lines, the raw log fingerprint is md5 of the first max_lines lines only, no size; whole-file hashing keeps size+md5. (4) On a processed hit, purged train/val and train anomalous dropped come from meta.json, logged as '<name> (from build)'; other [data] stats stay recomputed from files.
 Why: Lines past max_lines are never read, so size only caused useless rebuilds; truncation detection belongs to A6 (D-c333). meta.json is written atomically with the outputs; hit and miss logs keep the same fields.
+
+## D-6f30 · 2026-11-13 · parsing · main
+Parse cache key includes the split boundary only when fit_on=train; under fit_on=stream it does not (plan S2-5 to be reworded).
+Why: User 2026-11-13: stream parsing does not depend on the split, so keying on it would only force needless re-parses.
+
+## D-fc1a · 2026-11-13 · parsing · main
+Drain fit_on=stream is the default: one instance reads all lines in time order; a line's template_id is the cluster id returned when it is added, never recomputed. fit_on=train (fit on normal train lines, frozen, match only, unmatched -> <UNK>) stays as the RQ4 parser ablation. Vocab stays train-only. AGENTS.md invariant 2 must be reworded.
+Why: User 2026-11-13: stream = online deployment (spec A5); the ablation measures anomalies stream hides vs extra windows train sends to the LLM.
+Supersedes: D-8314
+
+## D-2982 · 2026-11-13 · parsing · main
+template_id stays a string: "E<cluster_id>", unmatched -> "<UNK>" (unk_token); plan S2-4 changed from -1.
+Why: User 2026-11-13: models read integer vocab ids, not template_id; strings keep the two id spaces apart and vocab.json round-trips (JSON keys are strings).
