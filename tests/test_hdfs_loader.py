@@ -79,6 +79,19 @@ def test_s1_4_sorted_stable(tmp_path):
     assert df.index.tolist() == [0, 1, 2]
 
 
+def test_s1_4_max_lines_and_extra_rows_logged(tmp_path, caplog):
+    with caplog.at_level("INFO", logger="cascadelad.data.loaders.hdfs"):
+        df = load(tmp_path, max_lines=3)
+    assert len(df) == 4  # 3 raw lines read, one of them has two block ids
+    assert "read 3 raw lines, 4 rows (1 extra from multi-block lines)" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level("INFO", logger="cascadelad.data.loaders.hdfs"):
+        load(tmp_path)
+    # 6 raw lines, one without a block id: 5 usable lines give 6 rows
+    assert "read 6 raw lines, 6 rows (1 extra from multi-block lines)" in caplog.text
+
+
 def test_columns_header_and_timestamp(tmp_path):
     df = load(tmp_path)
     assert list(df.columns) == ["timestamp", "content", "group_id", "label"]
