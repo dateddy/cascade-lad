@@ -6,6 +6,7 @@ import pandas as pd
 from omegaconf import OmegaConf
 
 from cascadelad.data import prepare as prepare_mod
+from cascadelad.data.loaders import get_loader
 from cascadelad.data.prepare import prepare, processed_key
 from cascadelad.data.vocab import Vocab
 
@@ -67,7 +68,7 @@ def test_outputs_leakage_and_vocab(tmp_path, caplog):
     ]
     train, val, test = (pd.read_parquet(out / f"{s}.parquet") for s in ("train", "val", "test"))
     for df in (train, val, test):
-        assert list(df.columns) == ["group_id", "event_ids", "timestamp", "label"]
+        assert list(df.columns) == ["group_id", "event_ids", "timestamp", "label", "line_pos"]
 
     assert set(train["group_id"]) == {
         "blk_0",
@@ -97,6 +98,7 @@ def test_outputs_leakage_and_vocab(tmp_path, caplog):
         "vocab size:",
         "test unk rate:",
         "processed cache: miss",
+        "fit_on: stream",
     ):
         assert needle in text, needle
 
@@ -116,6 +118,7 @@ def test_second_run_is_cache_hit_without_loading(tmp_path, monkeypatch, caplog):
     assert prepare(cfg, logger) == first
     assert "processed cache: hit" in caplog.text
     assert "parse cache: not run" in caplog.text
+    assert "fit_on: stream" in caplog.text
     assert "groups train: 5" in caplog.text
     for name in ("purged train", "purged val", "train anomalous dropped"):
         assert f"{name} (from build):" in caplog.text
@@ -233,4 +236,72 @@ def test_hit_stats_come_from_files_not_meta(tmp_path, caplog):
     assert f"vocab size: {real_vocab}" in caplog.text
     assert "999" not in caplog.text
     assert "parse cache: not run" in caplog.text
+    assert "fit_on: stream" in caplog.text
     assert "parse cache: miss" not in caplog.text
+
+
+def run_logged(cfg: dict, name: str, caplog) -> str:
+    logger = logging.getLogger(name)
+    caplog.set_level(logging.INFO, logger=name)
+    caplog.clear()
+    prepare(cfg, logger)
+    return caplog.text
+
+
+def with_split(cfg: dict, train: float, val: float, test: float) -> dict:
+    split = {**cfg["split"], "train_ratio": train, "val_ratio": val, "test_ratio": test}
+    return {**cfg, "split": split}
+
+
+def test_parsing_keeps_content_byte_identical(tmp_path, monkeypatch):
+    cfg = make_cfg(tmp_path)
+    loaded = get_loader(cfg["dataset"]["loader"], cfg["dataset"]).load()
+    seen = []
+    real = prepare_mod.build_windows
+
+    def spy(lines, *args, **kwargs):
+        seen.append(lines)
+        return real(lines, *args, **kwargs)
+
+    monkeypatch.setattr(prepare_mod, "build_windows", spy)
+    prepare(cfg, logging.getLogger("t_content"))
+    assert seen
+    for lines in seen:
+        assert {"template_id", "template"} <= set(lines.columns)
+        assert lines["content"].tolist() == loaded.loc[lines.index, "content"].tolist()
+
+
+def test_data_log_prints_fit_on_for_both_modes(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    assert "fit_on: stream" in run_logged(cfg, "t_stream", caplog)
+    cfg["parser"]["fit_on"] = "train"
+    miss = run_logged(cfg, "t_train", caplog)
+    assert "fit_on: train" in miss and "processed cache: miss" in miss
+    hit = run_logged(cfg, "t_train", caplog)
+    assert "fit_on: train" in hit and "processed cache: hit" in hit
+
+
+def test_stream_ratio_change_is_parse_cache_hit(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    assert "parse cache: miss" in run_logged(cfg, "t_s1", caplog)
+    other = run_logged(with_split(cfg, 0.5, 0.2, 0.3), "t_s2", caplog)
+    assert "processed cache: miss" in other and "parse cache: hit" in other
+
+
+def test_train_ratio_change_is_parse_cache_miss(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    cfg["parser"]["fit_on"] = "train"
+    assert "parse cache: miss" in run_logged(cfg, "t_t1", caplog)
+    assert "parse cache: miss" in run_logged(with_split(cfg, 0.5, 0.2, 0.3), "t_t2", caplog)
+
+
+def test_line_pos_unique_with_group_id(tmp_path):
+    out = prepare(make_cfg(tmp_path), logging.getLogger("t_pos"))
+    frames = [pd.read_parquet(out / f"{s}.parquet") for s in ("train", "val", "test")]
+    keys = []
+    for df in frames:
+        for gid, ids, pos in zip(df["group_id"], df["event_ids"], df["line_pos"], strict=True):
+            assert len(ids) == len(pos) and list(pos) == sorted(pos)
+            keys += [(gid, int(p)) for p in pos]
+    assert len(keys) == len(set(keys))
+    assert len({p for _, p in keys}) == len(keys)  # a position belongs to exactly one block

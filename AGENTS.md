@@ -66,7 +66,7 @@ Unsupervised log anomaly detection on large-scale system logs. A lightweight det
 
 ### Research invariants: never change without the user's explicit yes
 1. Splits are chronological. A random split is allowed only as a clearly labeled comparison.
-2. Templates and vocab are fit on train only. Unseen templates map to `<UNK>`.
+2. Vocab is built on train only; unseen template ids map to `<UNK>`. Templates come from Drain `fit_on=stream` (online, each line's id fixed when it is read; default) or `fit_on=train` (fit on normal train lines, frozen; ablation).
 3. Detectors train on normal train sequences only.
 4. Model selection (`best.pt`, early stopping) uses val loss on normal sequences. Never F1 or any metric that uses anomaly labels.
 5. Anomaly labels are used only for (a) threshold / g selection on val, with the same procedure for every method, and (b) test evaluation, run once per run after training.

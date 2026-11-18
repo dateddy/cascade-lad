@@ -77,3 +77,13 @@ def test_empty_input_raises():
         session_bounds(empty)
     with pytest.raises(ValueError, match="empty"):
         build_windows(empty, "template")
+
+
+def test_extra_cols_are_aligned_lists():
+    lines = LINES.assign(line_pos=[10, 11, 12, 13, 14])
+    windows = build_windows(lines, "template", extra_cols=("line_pos",)).set_index("group_id")
+    assert windows.loc["a", "line_pos"] == [11, 12, 13]
+    assert windows.loc["b", "line_pos"] == [10, 14]
+    assert len(windows.loc["a", "line_pos"]) == len(windows.loc["a", "templates"])
+    default = build_windows(LINES, "template")
+    assert list(default.columns) == ["group_id", "templates", "timestamp", "label"]

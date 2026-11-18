@@ -1,5 +1,7 @@
 """Group log lines into sessions (HDFS: one block id = one session)."""
 
+from collections.abc import Sequence
+
 import pandas as pd
 
 
@@ -21,10 +23,13 @@ def session_bounds(lines: pd.DataFrame) -> pd.DataFrame:
     ).reset_index()
 
 
-def build_windows(lines: pd.DataFrame, token_col: str) -> pd.DataFrame:
+def build_windows(
+    lines: pd.DataFrame, token_col: str, extra_cols: Sequence[str] = ()
+) -> pd.DataFrame:
     """One row per group with its events in row order, ordered by (timestamp, group_id).
 
-    `timestamp` is the group's first line. `lines` must already be in log order.
+    `timestamp` is the group's first line. `lines` must already be in log order. Each name in
+    `extra_cols` becomes a list column aligned with `templates` (e.g. each line's position).
     """
     _check_nonempty(lines)
     bounds = session_bounds(lines)
@@ -37,4 +42,6 @@ def build_windows(lines: pd.DataFrame, token_col: str) -> pd.DataFrame:
             "label": bounds["label"],
         }
     )
+    for col in extra_cols:
+        windows[col] = bounds["group_id"].map(lines.groupby("group_id", sort=True)[col].agg(list))
     return windows.sort_values(["timestamp", "group_id"], kind="stable").reset_index(drop=True)

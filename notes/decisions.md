@@ -130,3 +130,23 @@ Supersedes: D-8314
 ## D-2982 · 2026-11-13 · parsing · main
 template_id stays a string: "E<cluster_id>", unmatched -> "<UNK>" (unk_token); plan S2-4 changed from -1.
 Why: User 2026-11-13: models read integer vocab ids, not template_id; strings keep the two id spaces apart and vocab.json round-trips (JSON keys are strings).
+
+## D-3ffe · 2026-11-18 · data · fix/stage-2-protocol
+Dataset configs get a loader: key; prepare calls get_loader(cfg.dataset.loader). HDFS_2k loads through the hdfs loader with the full HDFS anomaly_label.csv.
+Why: User 2026-11-18: S2-3/S2-6 must run on HDFS_2k through prepare; all 2200 HDFS_2k block ids have labels.
+
+## D-d10d · 2026-11-18 · parsing · fix/stage-2-protocol
+Under fit_on=stream a line's template text is the cluster template returned when that line was added (never the final template).
+Why: User 2026-11-18: matches D-fc1a 'recorded then, never recomputed'; no future lines leak into a line's template.
+
+## D-858f · 2026-11-18 · parsing · fix/stage-2-protocol
+S2-6 stream-vs-train comparison lives in src/cascadelad/data/fit_on_compare.py plus scripts/compare_fit_on.py.
+Why: User 2026-11-18: reusable for RQ4 on full HDFS/BGL; keeps parser_check about Loghub accuracy only.
+
+## D-376b · 2026-11-18 · parsing · fix/stage-2-protocol
+AGENTS.md invariant 2 is reworded: vocab on train only, unseen ids -> <UNK>; templates from Drain fit_on=stream (default) or fit_on=train (ablation).
+Why: User 2026-11-18: D-fc1a required the rewording; done in step 8 of fix/stage-2-protocol.
+
+## D-a0f3 · 2026-11-18 · scope · fix/stage-2-protocol
+src/cascadelad/data/prepare.py: only the parse call changed (parse_cached -> parse_lines, all loaded rows, fit mask under fit_on=train) so the suite stays importable after step 2; line_pos, template column, fit_on log and loader key stay in step 4.
+Why: User 2026-11-18 chose to keep it: one-line bridge, step 4 rewrites that block. Test assertion changes in tests/test_parsing_cache.py approved (signature and cache-format change, equivalents kept).

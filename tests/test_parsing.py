@@ -61,3 +61,57 @@ def test_grouping_accuracy_errors():
         grouping_accuracy(["a"], ["x", "y"])
     with pytest.raises(ValueError):
         grouping_accuracy([], [])
+
+
+EVOLVE = ["user alice logged in now", "user bob logged in now", "user carol logged in now"]
+
+
+def test_template_ids_are_E_strings():
+    out = DrainParser(parser_cfg()).add(TRAIN)
+    assert all(isinstance(i, str) and i.startswith("E") and i[1:].isdigit() for i, _ in out)
+    assert all(isinstance(t, str) for _, t in out)
+
+
+def test_stream_ids_fixed_when_added():
+    p = DrainParser(parser_cfg())
+    first = p.add(EVOLVE[:1])[0][0]
+    p.add(EVOLVE[1:] + TRAIN)
+    assert p.add(EVOLVE[:1])[0][0] == first
+
+
+def test_stream_template_is_template_at_that_moment():
+    out = DrainParser(parser_cfg()).add(EVOLVE)
+    assert out[0][0] == out[1][0] == out[2][0]
+    assert out[0][1] == EVOLVE[0]  # exact text when first seen
+    assert out[1][1] == "user <*> logged in now"  # generalised once bob arrives
+    assert out[0][1] != out[2][1]  # earlier line keeps its older text
+
+
+def test_stream_prefix_stable():
+    cfg = parser_cfg()
+    stream = [*TRAIN, *EVOLVE, "another new kind of message appears"]
+    full = DrainParser(cfg).add(stream)
+    prefix = DrainParser(cfg).add(stream[:4])
+    assert [i for i, _ in prefix] == [i for i, _ in full[:4]]
+
+
+def test_add_keeps_duplicates():
+    p = DrainParser(parser_cfg())
+    out = p.add([TRAIN[0], TRAIN[0]])
+    assert len(out) == 2 and out[0][0] == out[1][0]
+
+
+def test_train_cluster_count_unchanged_after_apply():
+    p = DrainParser(parser_cfg()).fit(TRAIN)
+    n = p.n_clusters
+    assert n == len(p.templates())
+    p.transform(["brand new message never seen before ok", *TRAIN, *EVOLVE])
+    assert p.n_clusters == n
+
+
+def test_train_unseen_is_unk_string():
+    cfg = parser_cfg()
+    p = DrainParser(cfg).fit(TRAIN)
+    out = p.transform(["totally different words appear here now", TRAIN[0]])
+    assert out[0] == cfg["unk_token"] == "<UNK>"
+    assert out[1] != cfg["unk_token"]
