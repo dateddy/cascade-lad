@@ -23,7 +23,7 @@ def _frame(**overrides) -> pd.DataFrame:
         "timestamp": pd.to_datetime(["2008-11-09 20:35:18", "2008-11-09 20:35:19"]),
         "content": ["a", "b"],
         "group_id": ["blk_1", "blk_2"],
-        "label": [0, 1],
+        "label": pd.array([0, 1], dtype="int8"),
     }
     data.update(overrides)
     return pd.DataFrame(data)
@@ -32,6 +32,8 @@ def _frame(**overrides) -> pd.DataFrame:
 def _register_dummy(name: str, df: pd.DataFrame) -> None:
     @register_loader(name)
     class Dummy(LogLoader):
+        label_granularity = "group"
+
         def _load(self) -> pd.DataFrame:
             return df
 
@@ -66,6 +68,38 @@ def test_wrong_or_extra_columns_raise():
 
 
 def test_label_outside_zero_one_raises():
-    _register_dummy("badlabel", _frame(label=[0, 2]))
+    _register_dummy("badlabel", _frame(label=pd.array([0, 2], dtype="int8")))
     with pytest.raises(ValueError, match="label"):
         get_loader("badlabel", {}).load()
+
+
+def test_missing_label_granularity_raises():
+    with pytest.raises(ValueError, match="label_granularity"):
+
+        @register_loader("nogran")
+        class NoGran(LogLoader):
+            def _load(self) -> pd.DataFrame:
+                return _frame()
+
+
+def test_invalid_label_granularity_raises():
+    with pytest.raises(ValueError, match="label_granularity"):
+
+        @register_loader("badgran")
+        class BadGran(LogLoader):
+            label_granularity = "session"
+
+            def _load(self) -> pd.DataFrame:
+                return _frame()
+
+
+def test_wrong_label_dtype_raises():
+    _register_dummy("int64label", _frame(label=[0, 1]))
+    with pytest.raises(ValueError, match="label.*int8"):
+        get_loader("int64label", {}).load()
+
+
+def test_wrong_timestamp_dtype_raises():
+    _register_dummy("strtime", _frame(timestamp=["2008-11-09 20:35:18", "2008-11-09 20:35:19"]))
+    with pytest.raises(ValueError, match="timestamp"):
+        get_loader("strtime", {}).load()
