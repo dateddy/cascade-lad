@@ -1,5 +1,10 @@
 # @package split
 name: chrono
+mode: chronological  # chronological | random (random only to compare with published HDFS numbers)
+seed: ${seed}  # used by mode=random only
 train_ratio: 0.7
 val_ratio: 0.1
 test_ratio: 0.2
+drop_train_anomalies: true  # false = dirty-train ablation (D-fb5d)
+drop_val_anomalies: true  # val is normal-only by default
+purge: true  # drop sessions straddling a split boundary (D-7d73); ignored for fixed windows

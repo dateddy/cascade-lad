@@ -45,6 +45,7 @@ def make_cfg(tmp_path: Path) -> dict:
             "split": load("split", "chrono.yaml"),
             "vocab": load("vocab", "default.yaml"),
             "paths": {"processed_dir": str(tmp_path / "processed")},
+            "seed": 0,
         }
     )
     cfg.dataset.raw_dir = str(raw)

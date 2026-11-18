@@ -150,3 +150,15 @@ Why: User 2026-11-18: D-fc1a required the rewording; done in step 8 of fix/stage
 ## D-a0f3 · 2026-11-18 · scope · fix/stage-2-protocol
 src/cascadelad/data/prepare.py: only the parse call changed (parse_cached -> parse_lines, all loaded rows, fit mask under fit_on=train) so the suite stays importable after step 2; line_pos, template column, fit_on log and loader key stay in step 4.
 Why: User 2026-11-18 chose to keep it: one-line bridge, step 4 rewrites that block. Test assertion changes in tests/test_parsing_cache.py approved (signature and cache-format change, equivalents kept).
+
+## D-fb5d · 2026-11-18 · splitting · fix/stage-1-3-protocol
+split.drop_train_anomalies: true (default) | false. false is the dirty-train ablation: train keeps anomalous sequences and detectors train on them, an allowed, labeled exception to invariant 3.
+Why: User 2026-11-18 approved the exception to invariant 3 for the Stage 3 follow-up; the default and the existing leakage test stay.
+
+## D-3c69 · 2026-11-18 · parsing · fix/stage-1-3-protocol
+With drop_train_anomalies=false and fit_on=train, Drain fits on every train line, anomalous ones included (the same train set the detector sees).
+Why: User 2026-11-18: filtering anomalies for the parser would read labels, which defeats the dirty-train ablation.
+
+## D-cfbf · 2026-11-18 · data · fix/stage-1-3-protocol
+Fixed windows (S3-5): dataset config key grouping: {mode: session|fixed, size, step}; build_fixed_windows plus synthetic tests now; BGL/Thunderbird loader is a later task. Processed parquet gains a line_labels column for every grouping mode.
+Why: User 2026-11-18: no BGL loader exists yet; one schema for all datasets keeps consumers simple.
