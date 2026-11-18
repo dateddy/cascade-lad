@@ -18,7 +18,7 @@ from cascadelad.data.vocab import Vocab
 from cascadelad.utils.run import log_section
 
 SPLITS = ("train", "val", "test")
-OUT_COLUMNS = ["group_id", "event_ids", "timestamp", "label"]
+OUT_COLUMNS = ["group_id", "event_ids", "timestamp", "label", "line_pos"]
 OUT_FILES = (*(f"{s}.parquet" for s in SPLITS), "vocab.json", "meta.json")
 HASH_CHUNK_BYTES = 1 << 20
 BUILD_STATS = ("purged train", "purged val", "train anomalous dropped")
@@ -88,6 +88,7 @@ def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
         "processed dir": out_dir,
         "processed cache": "hit",
         "parse cache": "not run",
+        "fit_on": cfg["parser"]["fit_on"],
         **{f"groups {s}": len(frames[s]) for s in SPLITS},
         **{f"{k} (from build)": build[k] for k in BUILD_STATS},
         **{f"anomaly % {s}": f"{100 * frames[s]['label'].mean():.2f}" for s in SPLITS},
@@ -105,21 +106,27 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
         log_section(logger, "data", _hit_stats(cfg, key, out_dir))
         return out_dir
 
-    lines = get_loader(cfg["dataset"]["name"], cfg["dataset"]).load()
+    lines = get_loader(cfg["dataset"]["loader"], cfg["dataset"]).load()
+    lines["line_pos"] = range(len(lines))  # stream position, joins stream and train runs
     split = chronological_split(session_bounds(lines), cfg["split"])
     ids = {"train": split.train, "val": split.val, "test": split.test}
-    lines = lines[lines["group_id"].isin(set().union(*ids.values()))]
 
+    # Parse every loaded row, purged blocks included: a stream parse must not depend on the split.
     mask = (
         lines["group_id"].isin(set(split.train)).tolist()
         if cfg["parser"]["fit_on"] == "train"
         else None
     )
     parsed, parse_hit = parse_lines(lines["content"].tolist(), cfg["parser"], mask)
-    lines = lines.assign(template_id=parsed["template_id"].to_numpy())
+    lines = lines.assign(
+        template_id=parsed["template_id"].to_numpy(), template=parsed["template"].to_numpy()
+    )
+    lines = lines[lines["group_id"].isin(set().union(*ids.values()))]
 
     windows = {
-        name: build_windows(lines[lines["group_id"].isin(set(ids[name]))], "template_id")
+        name: build_windows(
+            lines[lines["group_id"].isin(set(ids[name]))], "template_id", extra_cols=("line_pos",)
+        )
         for name in SPLITS
     }
     vocab = Vocab.build(windows["train"]["templates"], cfg["vocab"])
@@ -132,6 +139,7 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
         "processed dir": out_dir,
         "processed cache": "miss",
         "parse cache": "hit" if parse_hit else "miss",
+        "fit_on": cfg["parser"]["fit_on"],
         **{f"groups {s}": len(windows[s]) for s in SPLITS},
         "purged train": split.n_purged["train"],
         "purged val": split.n_purged["val"],

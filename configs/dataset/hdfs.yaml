@@ -1,5 +1,6 @@
 # @package dataset
 name: hdfs
+loader: hdfs  # key in the loader registry
 raw_dir: data/raw/hdfs
 log_file: HDFS.log
 label_file: preprocessed/anomaly_label.csv
