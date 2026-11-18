@@ -1,0 +1,10 @@
+# @package _global_
+defaults:
+  - override /dataset: hdfs_2k
+  - override /parser: drain
+  - override /split: chrono
+  - override /vocab: default
+
+note: fit_on_hdfs_2k
+compare:
+  prefix_ratio: 0.7  # S2-3: share of the stream parsed alone, compared with the full-stream ids

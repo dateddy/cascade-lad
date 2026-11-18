@@ -2,7 +2,7 @@
 - branch: fix/stage-2-protocol
 - status: active
 - created: 2026-11-18 14:59
-- updated: 2026-11-18 15:18
+- updated: 2026-11-18 15:21
 
 ## Plan
 - [x] 1. DrainParser.add (online ids) and fit_on config
@@ -10,12 +10,12 @@
 - [x] 3. build_windows keeps extra per-line columns
 - [x] 4. prepare uses fit_on, line_pos, template columns, loader key
 - [x] 5. HDFS_2k loader config and stream prefix check (S2-3)
-- [ ] 6. stream vs train comparison (S2-6) and script
+- [x] 6. stream vs train comparison (S2-6) and script
 - [ ] 7. Run on HDFS_2k and record numbers
 - [ ] 8. Reword invariant 2
 
 ## Next
-step 6: compare_fit_on + script + experiment config
+step 7: run HDFS_2k and record numbers
 
 ## Files
 (none)
@@ -26,3 +26,4 @@ step 6: compare_fit_on + script + experiment config
 - 2026-11-18 15:12 · build_windows extra_cols
 - 2026-11-18 15:16 · prepare: loader key, line_pos, template col, parse all rows, fit_on in [data]
 - 2026-11-18 15:18 · hdfs_2k loader config, prefix_mismatches (S2-3)
+- 2026-11-18 15:21 · compare_fit_on, run_compare, script, fit_on_hdfs_2k experiment
