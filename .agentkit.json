@@ -11,7 +11,8 @@
 
   "notes": {
     "dir": "notes",
-    "commit_tasks": false
+    "commit_tasks": false,
+    "base_branch": "fix/stage-1-3-protocol"
   },
 
   "context": {
