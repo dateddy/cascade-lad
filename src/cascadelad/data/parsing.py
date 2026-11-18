@@ -43,6 +43,19 @@ class DrainParser:
         self._fitted = True
         return self
 
+    def add(self, contents: Iterable[str]) -> list[tuple[str, str]]:
+        """Online mode: feed lines in order, no dedup. Per line returns (template_id, template)
+        as they were right after that line was added; earlier results are never revised."""
+        out = []
+        for content in contents:
+            res = self._miner.add_log_message(content)
+            out.append((f"E{res['cluster_id']}", res["template_mined"]))
+        return out
+
+    @property
+    def n_clusters(self) -> int:
+        return len(self._miner.drain.clusters)
+
     def transform(self, contents: Iterable[str]) -> list[str]:
         if not self._fitted:
             raise RuntimeError("transform() called before fit()")

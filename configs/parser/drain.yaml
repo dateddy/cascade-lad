@@ -1,5 +1,6 @@
 # @package parser
 name: drain
+fit_on: stream  # stream = online over the whole stream (default); train = fit on normal train lines, then frozen
 depth: 4
 sim_th: 0.5
 max_children: 100
