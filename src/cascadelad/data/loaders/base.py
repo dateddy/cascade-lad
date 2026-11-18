@@ -2,9 +2,7 @@
 
 Every dataset loader returns a DataFrame with exactly the STANDARD_COLUMNS:
   timestamp  (datetime64)  time of the log line
-  content    (str)         message text, header fields stripped
-  group_id   (str)         block id / session id the line belongs to
-  content    (str)         raw message text with parameter values, header fields stripped
+  content   (str)         raw message text with parameter values, header fields stripped
   group_id   (str)         block id / session id the line belongs to
   label      (int8)        0 = normal, 1 = anomalous. The per-line label when the loader's
                            label_granularity is "line"; the group's label broadcast to every

@@ -17,9 +17,9 @@ LOG = """\
 LABELS = "BlockId,Label\nblk_-100,Anomaly\nblk_200,Normal\nblk_300,Normal\n"
 
 
-def make_cfg(tmp_path: Path, **overrides):
-    (tmp_path / "HDFS.log").write_text(LOG, encoding="utf-8")
-    (tmp_path / "anomaly_label.csv").write_text(LABELS, encoding="utf-8")
+def make_cfg(tmp_path: Path, log: str = LOG, labels: str = LABELS, **overrides):
+    (tmp_path / "HDFS.log").write_text(log, encoding="utf-8")
+    (tmp_path / "anomaly_label.csv").write_text(labels, encoding="utf-8")
     cfg = OmegaConf.load(Path(__file__).parents[1] / "configs" / "dataset" / "hdfs.yaml")
     cfg.raw_dir = str(tmp_path)
     cfg.label_file = "anomaly_label.csv"  # flat fixture layout; the real config uses preprocessed/
@@ -30,6 +30,53 @@ def make_cfg(tmp_path: Path, **overrides):
 def load(tmp_path: Path, **overrides) -> pd.DataFrame:
     cfg = make_cfg(tmp_path, **overrides)
     return get_loader("hdfs", cfg).load()
+
+
+RECEIVING = "Receiving block blk_-1608999687919862906 src: /10.250.19.102:54106"
+UNORDERED_LOG = """\
+081109 203530 1 INFO dfs.DataNode: late blk_1 first
+081109 203520 2 INFO dfs.DataNode: early blk_1 second
+081109 203520 3 INFO dfs.DataNode: early blk_1 third
+"""
+
+
+def test_s1_1_dtypes(tmp_path):
+    df = load(tmp_path)
+    assert list(df.columns) == ["timestamp", "content", "group_id", "label"]
+    assert pd.api.types.is_datetime64_any_dtype(df["timestamp"])
+    assert pd.api.types.is_string_dtype(df["content"])
+    assert pd.api.types.is_string_dtype(df["group_id"])
+    assert str(df["label"].dtype) == "int8"
+    assert set(df["label"]) <= {0, 1}
+
+
+def test_s1_2_group_granularity_broadcast(tmp_path):
+    assert get_loader("hdfs", make_cfg(tmp_path)).label_granularity == "group"
+    df = load(tmp_path)
+    assert (df["group_id"] == "blk_-100").sum() == 3
+    assert df.groupby("group_id")["label"].nunique().eq(1).all()
+    assert df.loc[df["group_id"] == "blk_-100", "label"].eq(1).all()
+    assert df.loc[df["group_id"] != "blk_-100", "label"].eq(0).all()
+
+
+def test_s1_3_content_keeps_parameters(tmp_path):
+    log = f"081109 203518 35 INFO dfs.DataNode$DataXceiver: {RECEIVING}\n"
+    labels = "BlockId,Label\nblk_-1608999687919862906,Normal\n"
+    df = load(tmp_path, log=log, labels=labels)
+    assert df["content"].iloc[0] == RECEIVING
+    assert "blk_-1608999687919862906" in df["content"].iloc[0]
+    assert "10.250.19.102:54106" in df["content"].iloc[0]
+
+
+def test_s1_4_sorted_stable(tmp_path):
+    df = load(tmp_path, log=UNORDERED_LOG, labels="BlockId,Label\nblk_1,Normal\n")
+    assert df["timestamp"].is_monotonic_increasing
+    assert df["content"].tolist() == [
+        "early blk_1 second",
+        "early blk_1 third",
+        "late blk_1 first",
+    ]
+    assert df.index.tolist() == [0, 1, 2]
 
 
 def test_columns_header_and_timestamp(tmp_path):
