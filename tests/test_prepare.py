@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 
 from cascadelad.data import prepare as prepare_mod
 from cascadelad.data.loaders import get_loader
-from cascadelad.data.prepare import prepare, processed_key
+from cascadelad.data.prepare import anomaly_count, prepare, processed_key
 from cascadelad.data.vocab import Vocab
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -421,3 +421,51 @@ def test_output_has_line_labels(tmp_path):
         ):
             assert len(line_labels) == len(ids)
             assert set(line_labels) == {label}  # HDFS: block label on every line
+
+
+def logged(text: str, name: str) -> str:
+    """Value of the last `name: value` line in a log text."""
+    lines = [ln for ln in text.splitlines() if f"{name}:" in ln]
+    assert lines, name
+    return lines[-1].split(f"{name}:", 1)[1].strip()
+
+
+def test_data_log_prints_counts_and_percent_per_split(tmp_path, caplog):
+    """S3-7: absolute anomaly count and percentage for every split."""
+    cfg = make_cfg(tmp_path)
+    text = run_logged(cfg, "t_counts", caplog)
+    frames = read_splits(prepare(cfg, logging.getLogger("t_counts")))
+    for name, df in frames.items():
+        n = int(df["label"].sum())
+        assert logged(text, f"anomalies {name}") == f"{n} ({100 * n / len(df):.2f}%)"
+        assert logged(text, f"groups {name}") == str(len(df))
+    assert logged(text, "anomalies test") == "1 (50.00%)"  # blk_8 of blk_8, blk_9
+    assert logged(text, "anomalies train") == "0 (0.00%)"
+
+
+def test_anomaly_count_format():
+    assert anomaly_count(pd.Series([0, 1, 1, 0])) == "2 (50.00%)"
+    assert anomaly_count(pd.Series([0, 0, 0])) == "0 (0.00%)"
+    assert anomaly_count(pd.Series([], dtype="int8")) == "0 (n/a)"
+
+
+def test_logged_test_unk_rate_matches_recount(tmp_path, caplog):
+    """S3-6: the printed test unk rate equals a recount on the written test parquet."""
+    cfg = make_cfg(tmp_path)
+    text = run_logged(cfg, "t_unk", caplog)
+    out = prepare(cfg, logging.getLogger("t_unk"))
+    vocab = Vocab.from_json(out / "vocab.json")
+    assert vocab.token_to_id[vocab.pad_token] == 0 and vocab.token_to_id[vocab.unk_token] == 1
+    ids = [e for seq in pd.read_parquet(out / "test.parquet")["event_ids"] for e in seq]
+    assert logged(text, "test unk rate") == f"{ids.count(vocab.unk_id) / len(ids):.4f}"
+
+
+def test_hit_stats_counts_match_miss_stats(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    miss = run_logged(cfg, "t_hm", caplog)
+    hit = run_logged(cfg, "t_hm", caplog)
+    assert "processed cache: hit" in hit
+    for name in ("train", "val", "test"):
+        assert logged(hit, f"anomalies {name}") == logged(miss, f"anomalies {name}")
+    for name in ("train anomalous kept", "val anomalous dropped", "tail lines dropped"):
+        assert logged(hit, f"{name} (from build)") == logged(miss, name)

@@ -80,6 +80,14 @@ def processed_key(cfg: Mapping) -> str:
     return _hash_parts(_key_parts(cfg))
 
 
+def anomaly_count(labels: pd.Series) -> str:
+    """Anomalous groups as "<count> (<percent>%)"; an empty split prints "0 (n/a)"."""
+    if labels.empty:
+        return "0 (n/a)"
+    n = int((labels != 0).sum())
+    return f"{n} ({100 * n / len(labels):.2f}%)"
+
+
 def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
     """[data] stats of this run on a cache hit, recomputed from the cached files.
 
@@ -101,7 +109,7 @@ def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
         "split mode": cfg["split"]["mode"],
         **{f"groups {s}": len(frames[s]) for s in SPLITS},
         **{f"{k} (from build)": build[k] for k in BUILD_STATS},
-        **{f"anomaly % {s}": f"{100 * frames[s]['label'].mean():.2f}" for s in SPLITS},
+        **{f"anomalies {s}": anomaly_count(frames[s]["label"]) for s in SPLITS},
         "vocab size": vocab.size,
         "test unk rate": f"{sum(e == vocab.unk_id for e in test_ids) / len(test_ids):.4f}",
     }
@@ -182,7 +190,7 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
         "train anomalous kept": split.n_train_anomalous_kept,
         "val anomalous dropped": split.n_val_anomalous_dropped,
         "tail lines dropped": n_tail,
-        **{f"anomaly % {s}": f"{100 * windows[s]['label'].mean():.2f}" for s in SPLITS},
+        **{f"anomalies {s}": anomaly_count(windows[s]["label"]) for s in SPLITS},
         "vocab size": vocab.size,
         "test unk rate": f"{vocab.unk_rate(windows['test']['templates']):.4f}",
     }
