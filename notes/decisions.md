@@ -146,3 +146,7 @@ Why: User 2026-11-18: reusable for RQ4 on full HDFS/BGL; keeps parser_check abou
 ## D-376b · 2026-11-18 · parsing · fix/stage-2-protocol
 AGENTS.md invariant 2 is reworded: vocab on train only, unseen ids -> <UNK>; templates from Drain fit_on=stream (default) or fit_on=train (ablation).
 Why: User 2026-11-18: D-fc1a required the rewording; done in step 8 of fix/stage-2-protocol.
+
+## D-a0f3 · 2026-11-18 · scope · fix/stage-2-protocol
+src/cascadelad/data/prepare.py: only the parse call changed (parse_cached -> parse_lines, all loaded rows, fit mask under fit_on=train) so the suite stays importable after step 2; line_pos, template column, fit_on log and loader key stay in step 4.
+Why: User 2026-11-18 chose to keep it: one-line bridge, step 4 rewrites that block. Test assertion changes in tests/test_parsing_cache.py approved (signature and cache-format change, equivalents kept).

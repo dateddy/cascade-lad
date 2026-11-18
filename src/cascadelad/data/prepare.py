@@ -12,7 +12,7 @@ import pandas as pd
 
 from cascadelad.data.grouping import build_windows, session_bounds
 from cascadelad.data.loaders import get_loader
-from cascadelad.data.parsing import drain3_version, parse_cached, source_hash
+from cascadelad.data.parsing import drain3_version, parse_lines, source_hash
 from cascadelad.data.splitting import chronological_split
 from cascadelad.data.vocab import Vocab
 from cascadelad.utils.run import log_section
@@ -110,12 +110,13 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
     ids = {"train": split.train, "val": split.val, "test": split.test}
     lines = lines[lines["group_id"].isin(set().union(*ids.values()))]
 
-    train_lines = lines[lines["group_id"].isin(set(split.train))]
-    assignments, _, parse_hit = parse_cached(
-        train_lines["content"].tolist(), lines["content"].tolist(), cfg["parser"]
+    mask = (
+        lines["group_id"].isin(set(split.train)).tolist()
+        if cfg["parser"]["fit_on"] == "train"
+        else None
     )
-    id_of = dict(zip(assignments["content"], assignments["template_id"], strict=True))
-    lines = lines.assign(template_id=lines["content"].map(id_of))
+    parsed, parse_hit = parse_lines(lines["content"].tolist(), cfg["parser"], mask)
+    lines = lines.assign(template_id=parsed["template_id"].to_numpy())
 
     windows = {
         name: build_windows(lines[lines["group_id"].isin(set(ids[name]))], "template_id")
