@@ -1,7 +1,9 @@
 """Drain log parsing: contents -> template ids.
 
-fit() learns templates; transform() only matches and never learns, so lines whose
-template was not seen in fit() map to unk_token (research invariant 2).
+Two modes (parser.fit_on). stream (default): add() reads lines in order and each line's id
+and template are fixed when it is read. train: fit() learns on the selected lines, then
+transform() only matches and never learns, so unseen lines map to unk_token. The vocab is
+built on train only in both modes (research invariant 2).
 """
 
 import hashlib

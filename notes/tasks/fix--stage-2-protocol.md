@@ -2,7 +2,7 @@
 - branch: fix/stage-2-protocol
 - status: active
 - created: 2026-11-18 14:59
-- updated: 2026-11-18 15:44
+- updated: 2026-11-18 16:09
 
 ## Plan
 - [x] 1. DrainParser.add (online ids) and fit_on config
@@ -12,10 +12,10 @@
 - [x] 5. HDFS_2k loader config and stream prefix check (S2-3)
 - [x] 6. stream vs train comparison (S2-6) and script
 - [x] 7. Run on HDFS_2k and record numbers
-- [ ] 8. Reword invariant 2
+- [x] 8. Reword invariant 2
 
 ## Next
-step 8: reword invariant 2
+merge fix/stage-2-protocol into fix/stage-1-3-protocol
 
 ## Files
 (none)
@@ -28,3 +28,4 @@ step 8: reword invariant 2
 - 2026-11-18 15:18 · hdfs_2k loader config, prefix_mismatches (S2-3)
 - 2026-11-18 15:21 · compare_fit_on, run_compare, script, fit_on_hdfs_2k experiment
 - 2026-11-18 15:44 · HDFS_2k: grouping_accuracy 0.9975 (stream), S2-3 mismatches 0, S2-6 joined 442/442, unk_train_invocab_stream 0, 2nd run processed cache hit
+- 2026-11-18 16:09 · invariant 2 reworded in AGENTS.md; parsing.py docstring
