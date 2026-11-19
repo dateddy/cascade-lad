@@ -193,3 +193,7 @@ Why: User 2026-11-19 asked to implement D-346d; plan.md still said default 10000
 ## D-0037 · 2026-11-19 · scope · fix/stage-3-protocol
 docs/hdfs_setup_comparison.md: data-scope bullet updated for max_lines null default and prepare_hdfs_dev (D-346d, commit 0695b41)
 Why: User 2026-11-19 asked to implement D-346d; the note told readers to set null in hdfs.yaml, now the default.
+
+## D-dac0 · 2026-11-19 · tooling · fix/stage-3-protocol
+Commit scope notes is allowed. A decision that explains a code or doc change is committed with that change under its scope; a commit touching only notes/ (status updates, scope reasons, run results) uses docs(notes).
+Why: User 2026-11-19: keeps notes-only commits apart from docs/ edits and silences the scope WARN.
