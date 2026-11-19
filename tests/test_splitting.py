@@ -156,6 +156,12 @@ def test_random_same_seed_same_split():
     assert random_split(CLEAN, RANDOM) == random_split(CLEAN, RANDOM)
 
 
+def test_random_without_seed_raises():
+    """Seed is only in configs/split/random.yaml; split.mode=random on chrono fails clearly."""
+    with pytest.raises(ValueError, match="split.seed"):
+        random_split(CLEAN, {k: v for k, v in RANDOM.items() if k != "seed"})
+
+
 def test_random_different_seed_differs():
     """S3-2: a different seed gives a different split."""
     a = random_split(CLEAN, {**RANDOM, "seed": 0})

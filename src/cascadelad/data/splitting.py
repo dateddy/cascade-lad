@@ -94,6 +94,8 @@ def random_split(bounds: pd.DataFrame, cfg: Mapping) -> SplitResult:
     Groups are sorted by id before shuffling, so the result does not depend on input order.
     Within each split, ids are ordered by (start, group_id).
     """
+    if cfg.get("seed") is None:
+        raise ValueError("random split needs split.seed: use split=random, not split.mode=random")
     base = bounds.sort_values("group_id", kind="stable").reset_index(drop=True)
     n_train, n_val = _cut_counts(len(base), cfg)
     perm = np.random.default_rng(cfg["seed"]).permutation(len(base))

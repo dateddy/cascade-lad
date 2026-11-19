@@ -46,7 +46,6 @@ def make_cfg(tmp_path: Path) -> dict:
             "split": load("split", "chrono.yaml"),
             "vocab": load("vocab", "default.yaml"),
             "paths": {"processed_dir": str(tmp_path / "processed")},
-            "seed": 0,
         }
     )
     cfg.dataset.raw_dir = str(raw)
@@ -375,7 +374,7 @@ def test_fixed_mode_val_test_lines_not_before_last_train(tmp_path, monkeypatch):
 
 def test_random_mode_end_to_end(tmp_path, caplog):
     cfg = make_cfg(tmp_path)
-    cfg["split"]["mode"] = "random"
+    cfg["split"].update(mode="random", seed=0)  # what configs/split/random.yaml adds
     text = run_logged(cfg, "t_random", caplog)
     frames = read_splits(prepare(cfg, logging.getLogger("t_random")))
     ids = [g for df in frames.values() for g in df["group_id"]]
