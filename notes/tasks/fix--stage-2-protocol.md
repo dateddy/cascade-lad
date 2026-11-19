@@ -1,8 +1,8 @@
 # Task: Stage 2 protocol follow-up (Drain fit_on=stream|train, S2-1..S2-6)
 - branch: fix/stage-2-protocol
-- status: active
+- status: done
 - created: 2026-11-18 14:59
-- updated: 2026-11-18 16:09
+- updated: 2026-11-20 00:14
 
 ## Plan
 - [x] 1. DrainParser.add (online ids) and fit_on config
@@ -29,3 +29,4 @@ merge fix/stage-2-protocol into fix/stage-1-3-protocol
 - 2026-11-18 15:21 · compare_fit_on, run_compare, script, fit_on_hdfs_2k experiment
 - 2026-11-18 15:44 · HDFS_2k: grouping_accuracy 0.9975 (stream), S2-3 mismatches 0, S2-6 joined 442/442, unk_train_invocab_stream 0, 2nd run processed cache hit
 - 2026-11-18 16:09 · invariant 2 reworded in AGENTS.md; parsing.py docstring
+- 2026-11-20 00:14 · auto-closed (merged into fix/stage-1-3-protocol)

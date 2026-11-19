@@ -1,8 +1,8 @@
 # Task: Stage 3 — HDFS blocks grouped, split chronologically, encoded with a train-only vocab, written to data/processed/<hash>/
 - branch: feat/stage-3-grouping-split-vocab
-- status: active
+- status: done
 - created: 2026-11-04 09:44
-- updated: 2026-11-06 15:06
+- updated: 2026-11-20 00:14
 
 ## Plan
 - [x] 1. Dependency and configs
@@ -26,3 +26,4 @@ Merge Stage 3 into main (gk preflight merge)
 - 2026-11-04 09:52 · prepare.py + scripts/prepare_data.py + 3 tests + README; vf PASS
 - 2026-11-04 09:53 · real HDFS 100k run: miss then hit; 3 decisions recorded
 - 2026-11-06 15:06 · Fast-forwarded fix/cache-keys-include-data-code-raw-fingerp (0a06b2d, 7a671bd: D-2e83, D-e14d, D-23c3) into Stage 3; full vf PASS
+- 2026-11-20 00:14 · auto-closed (branch deleted)
