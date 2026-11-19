@@ -181,3 +181,15 @@ Supersedes: D-346d
 NaN template_id guard dropped: prepare now indexes parse_lines output by line position (line_pos), not by content, so a missing content cannot produce NaN.
 Why: Verified 2026-11-19 in prepare.py: template_id = parsed[...].to_numpy()[pos], rows aligned with contents by parse_lines.
 Supersedes: D-bb3b
+
+## D-eb1d · 2026-11-19 · scope · fix/stage-3-protocol
+README.md: max_lines default text updated to null + prepare_hdfs_dev (D-346d, commit 0695b41)
+Why: User 2026-11-19 asked to implement D-346d; README documented the old 100000 default.
+
+## D-6db5 · 2026-11-19 · scope · fix/stage-3-protocol
+docs/plan.md: Stage 1 files line now says max_lines default null and names prepare_hdfs_dev (D-346d, commit 0695b41)
+Why: User 2026-11-19 asked to implement D-346d; plan.md still said default 100000.
+
+## D-0037 · 2026-11-19 · scope · fix/stage-3-protocol
+docs/hdfs_setup_comparison.md: data-scope bullet updated for max_lines null default and prepare_hdfs_dev (D-346d, commit 0695b41)
+Why: User 2026-11-19 asked to implement D-346d; the note told readers to set null in hdfs.yaml, now the default.
