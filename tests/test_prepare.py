@@ -107,6 +107,7 @@ def test_outputs_leakage_and_vocab(tmp_path, caplog):
         "test unk rate:",
         "processed cache: miss",
         "fit_on: stream",
+        "max_lines: all",
     ):
         assert needle in text, needle
 
@@ -127,6 +128,7 @@ def test_second_run_is_cache_hit_without_loading(tmp_path, monkeypatch, caplog):
     assert "processed cache: hit" in caplog.text
     assert "parse cache: not run" in caplog.text
     assert "fit_on: stream" in caplog.text
+    assert "max_lines: all" in caplog.text
     assert "groups train: 5" in caplog.text
     for name in ("purged train", "purged val", "train anomalous dropped"):
         assert f"{name} (from build):" in caplog.text
@@ -468,3 +470,21 @@ def test_hit_stats_counts_match_miss_stats(tmp_path, caplog):
         assert logged(hit, f"anomalies {name}") == logged(miss, f"anomalies {name}")
     for name in ("train anomalous kept", "val anomalous dropped", "tail lines dropped"):
         assert logged(hit, f"{name} (from build)") == logged(miss, name)
+
+
+def test_max_lines_default_is_all_and_dev_slice_is_100k():
+    """D-346d: hdfs.yaml reads all lines; only the dev experiment sets the 100k smoke slice."""
+    dataset = OmegaConf.load(ROOT / "configs" / "dataset" / "hdfs.yaml")
+    dev = OmegaConf.load(ROOT / "configs" / "experiment" / "prepare_hdfs_dev.yaml")
+    assert dataset.max_lines is None
+    assert dev.dataset.max_lines == 100000
+    assert {"override /dataset": "hdfs"} in OmegaConf.to_container(dev.defaults)
+
+
+def test_data_log_prints_max_lines_slice(tmp_path, caplog):
+    """D-346d: a smoke-slice run says so in [data], on miss and on hit."""
+    cfg = make_cfg(tmp_path)
+    cfg["dataset"]["max_lines"] = 1000
+    assert "max_lines: 1000" in run_logged(cfg, "t_ml_miss", caplog)
+    hit = run_logged(cfg, "t_ml_hit", caplog)
+    assert "processed cache: hit" in hit and "max_lines: 1000" in hit

@@ -80,6 +80,12 @@ def processed_key(cfg: Mapping) -> str:
     return _hash_parts(_key_parts(cfg))
 
 
+def max_lines_label(dataset_cfg: Mapping) -> str:
+    """max_lines for the [data] log: the number, or "all" when it is null (D-346d)."""
+    n = dataset_cfg.get("max_lines")
+    return "all" if n is None else str(n)
+
+
 def anomaly_count(labels: pd.Series) -> str:
     """Anomalous groups as "<count> (<percent>%)"; an empty split prints "0 (n/a)"."""
     if labels.empty:
@@ -102,6 +108,7 @@ def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
         "raw_dir": cfg["dataset"]["raw_dir"],
         "processed key": key,
         "processed dir": out_dir,
+        "max_lines": max_lines_label(cfg["dataset"]),
         "processed cache": "hit",
         "parse cache": "not run",
         "fit_on": cfg["parser"]["fit_on"],
@@ -178,6 +185,7 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
         "raw_dir": cfg["dataset"]["raw_dir"],
         "processed key": key,
         "processed dir": out_dir,
+        "max_lines": max_lines_label(cfg["dataset"]),
         "processed cache": "miss",
         "parse cache": "hit" if parse_hit else "miss",
         "fit_on": cfg["parser"]["fit_on"],
