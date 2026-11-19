@@ -162,3 +162,22 @@ Why: User 2026-11-18: filtering anomalies for the parser would read labels, whic
 ## D-cfbf · 2026-11-18 · data · fix/stage-1-3-protocol
 Fixed windows (S3-5): dataset config key grouping: {mode: session|fixed, size, step}; build_fixed_windows plus synthetic tests now; BGL/Thunderbird loader is a later task. Processed parquet gains a line_labels column for every grouping mode.
 Why: User 2026-11-18: no BGL loader exists yet; one schema for all datasets keeps consumers simple.
+
+## D-cbb3 · 2026-11-19 · evaluation · fix/stage-3-protocol
+Thresholds and DeepLog top-g never read val or test labels: val_percentile (default, 99th percentile of val scores), pot, or flag_rate; same procedure for every method (plan.md protocol, spec 4.4). AGENTS.md invariant 5 reworded: labels only drop anomalies from train/val and score test. Still open from D-9417: evaluation unit = session, PCA input = per-session count vector, DeepLog session score = max over windows of -log p; decide at Stages 4-6.
+Why: User 2026-11-19: align AGENTS.md with plan.md/spec.md; val is normal-only by default, so max F1 on val cannot be computed anyway.
+Supersedes: D-9417
+
+## D-a0b1 · 2026-11-19 · splitting · fix/stage-3-protocol
+AGENTS.md invariant 3 names the dirty-train exception (split.drop_train_anomalies=false, D-fb5d); invariant 2 says fit_on=train fits on the train lines the detector sees (D-3c69).
+Why: User 2026-11-19: AGENTS.md must match plan.md, spec.md and recorded decisions.
+
+## D-0d06 · 2026-11-19 · data · fix/stage-3-protocol
+Done in 0695b41: hdfs.yaml max_lines null, configs/experiment/prepare_hdfs_dev.yaml sets 100000, [data] prints max_lines. Still to do: data.max_lines in metrics.json (when metrics.json exists, Stage 4/5) and the Stage 7 aggregation rejecting runs with max_lines != null.
+Why: Status update 2026-11-19.
+Supersedes: D-346d
+
+## D-f150 · 2026-11-19 · data-validation · fix/stage-3-protocol
+NaN template_id guard dropped: prepare now indexes parse_lines output by line position (line_pos), not by content, so a missing content cannot produce NaN.
+Why: Verified 2026-11-19 in prepare.py: template_id = parsed[...].to_numpy()[pos], rows aligned with contents by parse_lines.
+Supersedes: D-bb3b
