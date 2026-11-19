@@ -37,7 +37,7 @@ These decisions come from the literature review (Le & Zhang 2022, LogLLM 2025, R
 - `detectors/base.py` interface is fixed so the DeepLog model can be written in parallel.
 
 ## Stage 1: Download and load data
-**Files:** `scripts/download_data.py` (Zenodo record 8196385, checksum, unzip to `data/raw/<dataset>/`), `src/cascadelad/data/loaders/base.py` (interface + registry), `data/loaders/hdfs.py`, `configs/dataset/hdfs.yaml` (includes `max_lines`, default 100000 for development).
+**Files:** `scripts/download_data.py` (Zenodo record 8196385, checksum, unzip to `data/raw/<dataset>/`), `src/cascadelad/data/loaders/base.py` (interface + registry), `data/loaders/hdfs.py`, `configs/dataset/hdfs.yaml` (includes `max_lines`, default `null` = all lines; the 100000-line development slice is `configs/experiment/prepare_hdfs_dev.yaml`, D-346d). `[data]` prints `max_lines`; slice metrics are never main results (D-c83f).
 
 **Dataset:** HDFS_v1 only.
 

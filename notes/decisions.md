@@ -150,3 +150,50 @@ Why: User 2026-11-18: D-fc1a required the rewording; done in step 8 of fix/stage
 ## D-a0f3 · 2026-11-18 · scope · fix/stage-2-protocol
 src/cascadelad/data/prepare.py: only the parse call changed (parse_cached -> parse_lines, all loaded rows, fit mask under fit_on=train) so the suite stays importable after step 2; line_pos, template column, fit_on log and loader key stay in step 4.
 Why: User 2026-11-18 chose to keep it: one-line bridge, step 4 rewrites that block. Test assertion changes in tests/test_parsing_cache.py approved (signature and cache-format change, equivalents kept).
+
+## D-fb5d · 2026-11-18 · splitting · fix/stage-1-3-protocol
+split.drop_train_anomalies: true (default) | false. false is the dirty-train ablation: train keeps anomalous sequences and detectors train on them, an allowed, labeled exception to invariant 3.
+Why: User 2026-11-18 approved the exception to invariant 3 for the Stage 3 follow-up; the default and the existing leakage test stay.
+
+## D-3c69 · 2026-11-18 · parsing · fix/stage-1-3-protocol
+With drop_train_anomalies=false and fit_on=train, Drain fits on every train line, anomalous ones included (the same train set the detector sees).
+Why: User 2026-11-18: filtering anomalies for the parser would read labels, which defeats the dirty-train ablation.
+
+## D-cfbf · 2026-11-18 · data · fix/stage-1-3-protocol
+Fixed windows (S3-5): dataset config key grouping: {mode: session|fixed, size, step}; build_fixed_windows plus synthetic tests now; BGL/Thunderbird loader is a later task. Processed parquet gains a line_labels column for every grouping mode.
+Why: User 2026-11-18: no BGL loader exists yet; one schema for all datasets keeps consumers simple.
+
+## D-cbb3 · 2026-11-19 · evaluation · fix/stage-3-protocol
+Thresholds and DeepLog top-g never read val or test labels: val_percentile (default, 99th percentile of val scores), pot, or flag_rate; same procedure for every method (plan.md protocol, spec 4.4). AGENTS.md invariant 5 reworded: labels only drop anomalies from train/val and score test. Still open from D-9417: evaluation unit = session, PCA input = per-session count vector, DeepLog session score = max over windows of -log p; decide at Stages 4-6.
+Why: User 2026-11-19: align AGENTS.md with plan.md/spec.md; val is normal-only by default, so max F1 on val cannot be computed anyway.
+Supersedes: D-9417
+
+## D-a0b1 · 2026-11-19 · splitting · fix/stage-3-protocol
+AGENTS.md invariant 3 names the dirty-train exception (split.drop_train_anomalies=false, D-fb5d); invariant 2 says fit_on=train fits on the train lines the detector sees (D-3c69).
+Why: User 2026-11-19: AGENTS.md must match plan.md, spec.md and recorded decisions.
+
+## D-0d06 · 2026-11-19 · data · fix/stage-3-protocol
+Done in 0695b41: hdfs.yaml max_lines null, configs/experiment/prepare_hdfs_dev.yaml sets 100000, [data] prints max_lines. Still to do: data.max_lines in metrics.json (when metrics.json exists, Stage 4/5) and the Stage 7 aggregation rejecting runs with max_lines != null.
+Why: Status update 2026-11-19.
+Supersedes: D-346d
+
+## D-f150 · 2026-11-19 · data-validation · fix/stage-3-protocol
+NaN template_id guard dropped: prepare now indexes parse_lines output by line position (line_pos), not by content, so a missing content cannot produce NaN.
+Why: Verified 2026-11-19 in prepare.py: template_id = parsed[...].to_numpy()[pos], rows aligned with contents by parse_lines.
+Supersedes: D-bb3b
+
+## D-eb1d · 2026-11-19 · scope · fix/stage-3-protocol
+README.md: max_lines default text updated to null + prepare_hdfs_dev (D-346d, commit 0695b41)
+Why: User 2026-11-19 asked to implement D-346d; README documented the old 100000 default.
+
+## D-6db5 · 2026-11-19 · scope · fix/stage-3-protocol
+docs/plan.md: Stage 1 files line now says max_lines default null and names prepare_hdfs_dev (D-346d, commit 0695b41)
+Why: User 2026-11-19 asked to implement D-346d; plan.md still said default 100000.
+
+## D-0037 · 2026-11-19 · scope · fix/stage-3-protocol
+docs/hdfs_setup_comparison.md: data-scope bullet updated for max_lines null default and prepare_hdfs_dev (D-346d, commit 0695b41)
+Why: User 2026-11-19 asked to implement D-346d; the note told readers to set null in hdfs.yaml, now the default.
+
+## D-dac0 · 2026-11-19 · tooling · fix/stage-3-protocol
+Commit scope notes is allowed. A decision that explains a code or doc change is committed with that change under its scope; a commit touching only notes/ (status updates, scope reasons, run results) uses docs(notes).
+Why: User 2026-11-19: keeps notes-only commits apart from docs/ edits and silences the scope WARN.

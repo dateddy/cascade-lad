@@ -3,11 +3,12 @@ import logging
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from omegaconf import OmegaConf
 
 from cascadelad.data import prepare as prepare_mod
 from cascadelad.data.loaders import get_loader
-from cascadelad.data.prepare import prepare, processed_key
+from cascadelad.data.prepare import anomaly_count, prepare, processed_key
 from cascadelad.data.vocab import Vocab
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,7 +69,14 @@ def test_outputs_leakage_and_vocab(tmp_path, caplog):
     ]
     train, val, test = (pd.read_parquet(out / f"{s}.parquet") for s in ("train", "val", "test"))
     for df in (train, val, test):
-        assert list(df.columns) == ["group_id", "event_ids", "timestamp", "label", "line_pos"]
+        assert list(df.columns) == [
+            "group_id",
+            "event_ids",
+            "timestamp",
+            "label",
+            "line_labels",
+            "line_pos",
+        ]
 
     assert set(train["group_id"]) == {
         "blk_0",
@@ -99,6 +107,7 @@ def test_outputs_leakage_and_vocab(tmp_path, caplog):
         "test unk rate:",
         "processed cache: miss",
         "fit_on: stream",
+        "max_lines: all",
     ):
         assert needle in text, needle
 
@@ -119,6 +128,7 @@ def test_second_run_is_cache_hit_without_loading(tmp_path, monkeypatch, caplog):
     assert "processed cache: hit" in caplog.text
     assert "parse cache: not run" in caplog.text
     assert "fit_on: stream" in caplog.text
+    assert "max_lines: all" in caplog.text
     assert "groups train: 5" in caplog.text
     for name in ("purged train", "purged val", "train anomalous dropped"):
         assert f"{name} (from build):" in caplog.text
@@ -305,3 +315,176 @@ def test_line_pos_unique_with_group_id(tmp_path):
             keys += [(gid, int(p)) for p in pos]
     assert len(keys) == len(set(keys))
     assert len({p for _, p in keys}) == len(keys)  # a position belongs to exactly one block
+
+
+def read_splits(out: Path) -> dict[str, pd.DataFrame]:
+    return {s: pd.read_parquet(out / f"{s}.parquet") for s in ("train", "val", "test")}
+
+
+class FakeLoader:
+    """Line-labeled stream: 42 lines, one per minute, single source node."""
+
+    ANOMALOUS_LINES = {5, 33, 37}  # window 1 (train), window 8 (test), window 9 (test)
+
+    def __init__(self, n: int = 42) -> None:
+        self.n = n
+
+    def load(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2020-01-01", periods=self.n, freq="min"),
+                "content": [f"event {i % 3} on node x{i}" for i in range(self.n)],
+                "group_id": ["node"] * self.n,
+                "label": [int(i in self.ANOMALOUS_LINES) for i in range(self.n)],
+            }
+        )
+
+
+def fixed_cfg(tmp_path: Path, monkeypatch) -> dict:
+    """10 windows of 4 lines (2 tail lines dropped): train w0..w6, val w7, test w8..w9."""
+    cfg = make_cfg(tmp_path)
+    cfg["dataset"]["grouping"] = {"mode": "fixed", "size": 4, "step": 4}
+    monkeypatch.setattr(prepare_mod, "get_loader", lambda name, ds_cfg: FakeLoader())
+    return cfg
+
+
+def test_fixed_mode_no_window_crosses_split(tmp_path, monkeypatch, caplog):
+    """S3-5 in prepare: full windows only, max-of-lines label, no window in two splits."""
+    cfg = fixed_cfg(tmp_path, monkeypatch)
+    text = run_logged(cfg, "t_fixed", caplog)
+    frames = read_splits(prepare(cfg, logging.getLogger("t_f")))
+    ids = [set(df["group_id"]) for df in frames.values()]
+    assert not (ids[0] & ids[1] or ids[0] & ids[2] or ids[1] & ids[2])
+    for df in frames.values():
+        assert (df["event_ids"].map(len) == 4).all()
+        assert (df["line_labels"].map(len) == 4).all()
+        assert (df["label"] == df["line_labels"].map(max)).all()
+    assert len(frames["train"]) == 6  # w1 (anomalous) dropped from 7
+    assert frames["test"]["label"].tolist() == [1, 1]
+    assert "tail lines dropped: 2" in text
+    assert "purged train: 0" in text  # fixed windows are never purged
+    assert "grouping: fixed" in text
+
+
+def test_fixed_mode_val_test_lines_not_before_last_train(tmp_path, monkeypatch):
+    """S3-1 (window data): every val/test line comes at or after the last train line."""
+    frames = read_splits(prepare(fixed_cfg(tmp_path, monkeypatch), logging.getLogger("t_f1")))
+    last_train = max(p for pos in frames["train"]["line_pos"] for p in pos)
+    for name in ("val", "test"):
+        assert min(p for pos in frames[name]["line_pos"] for p in pos) > last_train
+
+
+def test_random_mode_end_to_end(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    cfg["split"].update(mode="random", seed=0)  # what configs/split/random.yaml adds
+    text = run_logged(cfg, "t_random", caplog)
+    frames = read_splits(prepare(cfg, logging.getLogger("t_random")))
+    ids = [g for df in frames.values() for g in df["group_id"]]
+    assert len(ids) == len(set(ids))
+    assert (frames["train"]["label"] == 0).all() and (frames["val"]["label"] == 0).all()
+    assert "split mode: random" in text and "purged train: 0" in text
+
+
+def test_drop_train_false_fit_on_train_mask_includes_anomalous(tmp_path, monkeypatch, caplog):
+    """D-3c69: with dirty train, Drain fits on the anomalous train block's lines too."""
+    cfg = make_cfg(tmp_path)
+    cfg["parser"]["fit_on"] = "train"
+    cfg["split"]["drop_train_anomalies"] = False
+    masks = []
+    real = prepare_mod.parse_lines
+
+    def spy(contents, parser_cfg, fit_mask=None):
+        masks.append((contents, fit_mask))
+        return real(contents, parser_cfg, fit_mask)
+
+    monkeypatch.setattr(prepare_mod, "parse_lines", spy)
+    text = run_logged(cfg, "t_dirty", caplog)
+    contents, mask = masks[0]
+    fitted = [c for c, m in zip(contents, mask, strict=True) if m]
+    assert any("blk_2 " in c or c.endswith("blk_2") for c in fitted)  # blk_2 is anomalous
+    assert "train anomalous kept: 1" in text and "train anomalous dropped: 0" in text
+    train = read_splits(prepare(cfg, logging.getLogger("t_dirty")))["train"]
+    assert set(train["group_id"]) >= {"blk_2"}
+
+
+def test_unknown_grouping_mode_raises(tmp_path):
+    cfg = make_cfg(tmp_path)
+    cfg["dataset"]["grouping"] = {"mode": "sliding"}
+    with pytest.raises(ValueError, match="unknown grouping mode"):
+        prepare(cfg, logging.getLogger("t_bad"))
+
+
+def test_output_has_line_labels(tmp_path):
+    frames = read_splits(prepare(make_cfg(tmp_path), logging.getLogger("t_ll")))
+    for df in frames.values():
+        for label, line_labels, ids in zip(
+            df["label"], df["line_labels"], df["event_ids"], strict=True
+        ):
+            assert len(line_labels) == len(ids)
+            assert set(line_labels) == {label}  # HDFS: block label on every line
+
+
+def logged(text: str, name: str) -> str:
+    """Value of the last `name: value` line in a log text."""
+    lines = [ln for ln in text.splitlines() if f"{name}:" in ln]
+    assert lines, name
+    return lines[-1].split(f"{name}:", 1)[1].strip()
+
+
+def test_data_log_prints_counts_and_percent_per_split(tmp_path, caplog):
+    """S3-7: absolute anomaly count and percentage for every split."""
+    cfg = make_cfg(tmp_path)
+    text = run_logged(cfg, "t_counts", caplog)
+    frames = read_splits(prepare(cfg, logging.getLogger("t_counts")))
+    for name, df in frames.items():
+        n = int(df["label"].sum())
+        assert logged(text, f"anomalies {name}") == f"{n} ({100 * n / len(df):.2f}%)"
+        assert logged(text, f"groups {name}") == str(len(df))
+    assert logged(text, "anomalies test") == "1 (50.00%)"  # blk_8 of blk_8, blk_9
+    assert logged(text, "anomalies train") == "0 (0.00%)"
+
+
+def test_anomaly_count_format():
+    assert anomaly_count(pd.Series([0, 1, 1, 0])) == "2 (50.00%)"
+    assert anomaly_count(pd.Series([0, 0, 0])) == "0 (0.00%)"
+    assert anomaly_count(pd.Series([], dtype="int8")) == "0 (n/a)"
+
+
+def test_logged_test_unk_rate_matches_recount(tmp_path, caplog):
+    """S3-6: the printed test unk rate equals a recount on the written test parquet."""
+    cfg = make_cfg(tmp_path)
+    text = run_logged(cfg, "t_unk", caplog)
+    out = prepare(cfg, logging.getLogger("t_unk"))
+    vocab = Vocab.from_json(out / "vocab.json")
+    assert vocab.token_to_id[vocab.pad_token] == 0 and vocab.token_to_id[vocab.unk_token] == 1
+    ids = [e for seq in pd.read_parquet(out / "test.parquet")["event_ids"] for e in seq]
+    assert logged(text, "test unk rate") == f"{ids.count(vocab.unk_id) / len(ids):.4f}"
+
+
+def test_hit_stats_counts_match_miss_stats(tmp_path, caplog):
+    cfg = make_cfg(tmp_path)
+    miss = run_logged(cfg, "t_hm", caplog)
+    hit = run_logged(cfg, "t_hm", caplog)
+    assert "processed cache: hit" in hit
+    for name in ("train", "val", "test"):
+        assert logged(hit, f"anomalies {name}") == logged(miss, f"anomalies {name}")
+    for name in ("train anomalous kept", "val anomalous dropped", "tail lines dropped"):
+        assert logged(hit, f"{name} (from build)") == logged(miss, name)
+
+
+def test_max_lines_default_is_all_and_dev_slice_is_100k():
+    """D-346d: hdfs.yaml reads all lines; only the dev experiment sets the 100k smoke slice."""
+    dataset = OmegaConf.load(ROOT / "configs" / "dataset" / "hdfs.yaml")
+    dev = OmegaConf.load(ROOT / "configs" / "experiment" / "prepare_hdfs_dev.yaml")
+    assert dataset.max_lines is None
+    assert dev.dataset.max_lines == 100000
+    assert {"override /dataset": "hdfs"} in OmegaConf.to_container(dev.defaults)
+
+
+def test_data_log_prints_max_lines_slice(tmp_path, caplog):
+    """D-346d: a smoke-slice run says so in [data], on miss and on hit."""
+    cfg = make_cfg(tmp_path)
+    cfg["dataset"]["max_lines"] = 1000
+    assert "max_lines: 1000" in run_logged(cfg, "t_ml_miss", caplog)
+    hit = run_logged(cfg, "t_ml_hit", caplog)
+    assert "processed cache: hit" in hit and "max_lines: 1000" in hit

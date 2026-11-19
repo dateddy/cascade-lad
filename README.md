@@ -34,7 +34,7 @@ data/raw/hdfs/
 ```
 
 `get_loader("hdfs", cfg.dataset).load()` returns `timestamp, content, group_id, label`, one row per
-(log line, block id), reading the first `max_lines` lines (default 100000, `null` = all).
+(log line, block id), reading the first `max_lines` lines (default `null` = all; `experiment=prepare_hdfs_dev` sets the 100000-line smoke slice, D-346d). `[data]` prints `max_lines`.
 
 ## Parsing
 

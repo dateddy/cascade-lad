@@ -38,7 +38,7 @@ Nguồn:
 
 ## Điểm khác so với DeepLog cần ghi trong luận văn
 
-- **Phạm vi dữ liệu.** DeepLog train trên 100k dòng đầu và test trên toàn bộ phần còn lại. cascade-lad với `max_lines: 100000` chia 70/10/20 bên trong 100k dòng đó. Muốn chạy trên toàn bộ HDFS thì đặt `max_lines: null` trong [hdfs.yaml](../configs/dataset/hdfs.yaml).
+- **Phạm vi dữ liệu.** DeepLog train trên 100k dòng đầu và test trên toàn bộ phần còn lại. cascade-lad với `max_lines: 100000` (`experiment=prepare_hdfs_dev`) chia 70/10/20 bên trong 100k dòng đó. Mặc định trong [hdfs.yaml](../configs/dataset/hdfs.yaml) là `max_lines: null`, tức toàn bộ HDFS (D-346d).
 - **Chọn g.** DeepLog cố định g=9 và khảo sát ảnh hưởng của g trên test. cascade-lad chọn g trên val, dùng cùng thủ tục cho mọi method.
 - **Session ở ranh giới.** DeepLog không nói rõ cách xử lý block bắt đầu trong 100k dòng đầu nhưng còn tiếp tục về sau. cascade-lad xử lý chuyện này rõ ràng bằng purge.
 - **Timestamp chỉ chính xác tới giây.** Nhiều block có cùng `start`; thứ tự giữa chúng được quyết định bởi `group_id`. Cách này ổn định nhưng tùy ý, nên ghi vào phần hạn chế.

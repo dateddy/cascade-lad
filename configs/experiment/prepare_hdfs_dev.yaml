@@ -1,0 +1,11 @@
+# @package _global_
+# Smoke slice only (D-c83f): its metrics are never main results.
+defaults:
+  - override /dataset: hdfs
+  - override /parser: drain
+  - override /split: chrono
+  - override /vocab: default
+
+note: prepare_hdfs_dev
+dataset:
+  max_lines: 100000  # first 100k lines in file order (D-346d)

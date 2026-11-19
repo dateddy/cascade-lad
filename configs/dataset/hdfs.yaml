@@ -4,7 +4,9 @@ loader: hdfs  # key in the loader registry
 raw_dir: data/raw/hdfs
 log_file: HDFS.log
 label_file: preprocessed/anomaly_label.csv
-max_lines: 100000  # first N lines in file order; null = all lines
+grouping:
+  mode: session  # session (one group id = one sequence) | fixed (size/step lines, D-cfbf)
+max_lines: null  # first N lines in file order; null = all lines. Smoke slice: experiment=prepare_hdfs_dev (D-346d)
 line_regex: '^(?P<date>\d{6}) (?P<time>\d{6}) (?P<pid>\d+) (?P<level>\w+) (?P<component>[^:]+): (?P<content>.*)$'
 timestamp_format: '%y%m%d %H%M%S'
 block_regex: 'blk_-?\d+'

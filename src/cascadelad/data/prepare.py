@@ -10,18 +10,26 @@ from pathlib import Path
 
 import pandas as pd
 
-from cascadelad.data.grouping import build_windows, session_bounds
+from cascadelad.data.grouping import assign_fixed_windows, build_windows, session_bounds
 from cascadelad.data.loaders import get_loader
 from cascadelad.data.parsing import drain3_version, parse_lines, source_hash
-from cascadelad.data.splitting import chronological_split
+from cascadelad.data.splitting import split_groups
 from cascadelad.data.vocab import Vocab
 from cascadelad.utils.run import log_section
 
 SPLITS = ("train", "val", "test")
-OUT_COLUMNS = ["group_id", "event_ids", "timestamp", "label", "line_pos"]
+OUT_COLUMNS = ["group_id", "event_ids", "timestamp", "label", "line_labels", "line_pos"]
 OUT_FILES = (*(f"{s}.parquet" for s in SPLITS), "vocab.json", "meta.json")
 HASH_CHUNK_BYTES = 1 << 20
-BUILD_STATS = ("purged train", "purged val", "train anomalous dropped")
+BUILD_STATS = (
+    "purged train",
+    "purged val",
+    "train anomalous dropped",
+    "train anomalous kept",
+    "val anomalous dropped",
+    "tail lines dropped",
+)
+GROUPING_MODES = ("session", "fixed")
 
 
 def _file_md5(path: Path, max_lines: int | None = None) -> dict:
@@ -72,6 +80,20 @@ def processed_key(cfg: Mapping) -> str:
     return _hash_parts(_key_parts(cfg))
 
 
+def max_lines_label(dataset_cfg: Mapping) -> str:
+    """max_lines for the [data] log: the number, or "all" when it is null (D-346d)."""
+    n = dataset_cfg.get("max_lines")
+    return "all" if n is None else str(n)
+
+
+def anomaly_count(labels: pd.Series) -> str:
+    """Anomalous groups as "<count> (<percent>%)"; an empty split prints "0 (n/a)"."""
+    if labels.empty:
+        return "0 (n/a)"
+    n = int((labels != 0).sum())
+    return f"{n} ({100 * n / len(labels):.2f}%)"
+
+
 def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
     """[data] stats of this run on a cache hit, recomputed from the cached files.
 
@@ -86,15 +108,33 @@ def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
         "raw_dir": cfg["dataset"]["raw_dir"],
         "processed key": key,
         "processed dir": out_dir,
+        "max_lines": max_lines_label(cfg["dataset"]),
         "processed cache": "hit",
         "parse cache": "not run",
         "fit_on": cfg["parser"]["fit_on"],
+        "grouping": cfg["dataset"]["grouping"]["mode"],
+        "split mode": cfg["split"]["mode"],
         **{f"groups {s}": len(frames[s]) for s in SPLITS},
         **{f"{k} (from build)": build[k] for k in BUILD_STATS},
-        **{f"anomaly % {s}": f"{100 * frames[s]['label'].mean():.2f}" for s in SPLITS},
+        **{f"anomalies {s}": anomaly_count(frames[s]["label"]) for s in SPLITS},
         "vocab size": vocab.size,
         "test unk rate": f"{sum(e == vocab.unk_id for e in test_ids) / len(test_ids):.4f}",
     }
+
+
+def group_lines(lines: pd.DataFrame, grouping: Mapping) -> tuple[pd.DataFrame, int, str, bool]:
+    """Apply the dataset's grouping mode to loaded lines (log order, original index kept).
+
+    Returns (grouped lines, tail lines dropped, label_rule, purge allowed). Sessions may
+    overlap in time and use the split's purge flag; fixed windows never overlap, so they are
+    split without purging and labeled by the max of their line labels.
+    """
+    if grouping["mode"] == "session":
+        return lines, 0, "same", True
+    if grouping["mode"] == "fixed":
+        windowed, n_tail = assign_fixed_windows(lines, grouping["size"], grouping["step"])
+        return windowed, n_tail, "max", False
+    raise ValueError(f"unknown grouping mode {grouping['mode']!r}, expected {GROUPING_MODES}")
 
 
 def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
@@ -108,24 +148,32 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
 
     lines = get_loader(cfg["dataset"]["loader"], cfg["dataset"]).load()
     lines["line_pos"] = range(len(lines))  # stream position, joins stream and train runs
-    split = chronological_split(session_bounds(lines), cfg["split"])
+    grouped, n_tail, label_rule, purge_ok = group_lines(lines, cfg["dataset"]["grouping"])
+    split_cfg = {**cfg["split"], "purge": cfg["split"]["purge"] and purge_ok}
+    split = split_groups(session_bounds(grouped, label_rule), split_cfg)
     ids = {"train": split.train, "val": split.val, "test": split.test}
 
-    # Parse every loaded row, purged blocks included: a stream parse must not depend on the split.
+    # Parse every loaded row (purged groups and a dropped window tail included): a stream parse
+    # must not depend on the split. fit_on=train fits on every train line, anomalous ones
+    # included when drop_train_anomalies is false (D-3c69).
+    train_pos = set(grouped.loc[grouped["group_id"].isin(set(split.train)), "line_pos"])
     mask = (
-        lines["group_id"].isin(set(split.train)).tolist()
-        if cfg["parser"]["fit_on"] == "train"
-        else None
+        lines["line_pos"].isin(train_pos).tolist() if cfg["parser"]["fit_on"] == "train" else None
     )
     parsed, parse_hit = parse_lines(lines["content"].tolist(), cfg["parser"], mask)
-    lines = lines.assign(
-        template_id=parsed["template_id"].to_numpy(), template=parsed["template"].to_numpy()
+    pos = grouped["line_pos"].to_numpy()  # line_pos is the row number in `lines` and `parsed`
+    grouped = grouped.assign(
+        template_id=parsed["template_id"].to_numpy()[pos],
+        template=parsed["template"].to_numpy()[pos],
     )
-    lines = lines[lines["group_id"].isin(set().union(*ids.values()))]
+    grouped = grouped[grouped["group_id"].isin(set().union(*ids.values()))]
 
     windows = {
         name: build_windows(
-            lines[lines["group_id"].isin(set(ids[name]))], "template_id", extra_cols=("line_pos",)
+            grouped[grouped["group_id"].isin(set(ids[name]))],
+            "template_id",
+            extra_cols=("line_pos",),
+            label_rule=label_rule,
         )
         for name in SPLITS
     }
@@ -137,14 +185,20 @@ def prepare(cfg: Mapping, logger: logging.Logger) -> Path:
         "raw_dir": cfg["dataset"]["raw_dir"],
         "processed key": key,
         "processed dir": out_dir,
+        "max_lines": max_lines_label(cfg["dataset"]),
         "processed cache": "miss",
         "parse cache": "hit" if parse_hit else "miss",
         "fit_on": cfg["parser"]["fit_on"],
+        "grouping": cfg["dataset"]["grouping"]["mode"],
+        "split mode": cfg["split"]["mode"],
         **{f"groups {s}": len(windows[s]) for s in SPLITS},
         "purged train": split.n_purged["train"],
         "purged val": split.n_purged["val"],
         "train anomalous dropped": split.n_train_anomalous_dropped,
-        **{f"anomaly % {s}": f"{100 * windows[s]['label'].mean():.2f}" for s in SPLITS},
+        "train anomalous kept": split.n_train_anomalous_kept,
+        "val anomalous dropped": split.n_val_anomalous_dropped,
+        "tail lines dropped": n_tail,
+        **{f"anomalies {s}": anomaly_count(windows[s]["label"]) for s in SPLITS},
         "vocab size": vocab.size,
         "test unk rate": f"{vocab.unk_rate(windows['test']['templates']):.4f}",
     }
