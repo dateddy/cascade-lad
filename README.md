@@ -34,8 +34,8 @@ data/raw/hdfs/
 ```
 
 `get_loader("hdfs", cfg.dataset).load()` returns `timestamp, content, group_id, label`, one row per
-(log line, block id), reading the first `max_lines` lines (default 100000, `null` = all).
+(log line, block id), reading the first `max_lines` lines (default `null` = all; `experiment=prepare_hdfs_dev` sets the 100000-line smoke slice, D-346d). `[data]` prints `max_lines`.
 
 ## Parsing
 
-`DrainParser` (`src/cascadelad/data/parsing.py`) learns templates in `fit` and only matches in `transform`; unseen templates map to `<UNK>`. `parse_cached` stores results in `data/parsed/<hash>/` (`assignments.csv`, `templates.json`, `meta.json`); the hash covers the parser config and the fit/apply contents, so a rerun is a cache hit.
+`DrainParser` (`src/cascadelad/data/parsing.py`) runs Drain in one of two modes, set by `parser.fit_on`. `stream` (default): `add` reads lines in time order and each line's `template_id` and `template` are fixed when it is read. `train`: `fit` learns on the selected (normal train) lines, then `transform` only matches; unseen lines map to `<UNK>`. `parse_lines(contents, cfg, fit_mask)` returns one `template_id, template` row per line and caches them in `data/parsed/<hash>/` (`lines.parquet`, `templates.json`, `meta.json`); the hash covers the parser config incl. `fit_on`, the contents and, under `train`, the fit mask, so a rerun is a cache hit and, under `stream`, a new split over the same stream is too.

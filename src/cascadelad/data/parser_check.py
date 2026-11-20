@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from cascadelad.data.parsing import grouping_accuracy, parse_cached
+from cascadelad.data.parsing import grouping_accuracy, parse_lines
 from cascadelad.utils.run import log_section
 
 
@@ -41,9 +41,9 @@ def run_check(
         if a != b:
             raise ValueError(f"line {i}: log content {a!r} != csv content {b!r}")
 
-    assignments, templates, cache_hit = parse_cached(contents, contents, parser_cfg)
-    id_of = dict(zip(assignments["content"], assignments["template_id"], strict=True))
-    pred = [id_of[c] for c in contents]
+    mask = [True] * len(contents) if parser_cfg["fit_on"] == "train" else None
+    lines, cache_hit = parse_lines(contents, parser_cfg, mask)
+    pred = lines["template_id"].tolist()
     metrics: dict[str, float | int | bool] = {
         "lines": len(contents),
         "predicted_templates": len(set(pred)),

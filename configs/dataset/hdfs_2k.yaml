@@ -1,10 +1,22 @@
 # @package dataset
 name: hdfs_2k
+loader: hdfs  # same loader as the full dataset
 raw_dir: data/raw/hdfs_2k
 log_file: HDFS_2k.log
 structured_file: HDFS_2k.log_structured.csv
-# must match configs/dataset/hdfs.yaml
+label_file: ../hdfs/preprocessed/anomaly_label.csv  # labels of the full dataset cover every 2k block
+grouping:
+  mode: session  # session (one group id = one sequence) | fixed (size/step lines, D-cfbf)
+max_lines: null
+# line_regex .. label_map must match configs/dataset/hdfs.yaml (tests/test_fit_on_compare.py)
 line_regex: '^(?P<date>\d{6}) (?P<time>\d{6}) (?P<pid>\d+) (?P<level>\w+) (?P<component>[^:]+): (?P<content>.*)$'
+timestamp_format: '%y%m%d %H%M%S'
+block_regex: 'blk_-?\d+'
+label_column: Label
+block_column: BlockId
+label_map:
+  Normal: 0
+  Anomaly: 1
 content_column: Content
 event_column: EventId
 files:

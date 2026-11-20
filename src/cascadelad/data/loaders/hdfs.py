@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 @register_loader("hdfs")
 class HDFSLoader(LogLoader):
+    label_granularity = "group"
+
     def _load(self) -> pd.DataFrame:
         cfg = self.cfg
         raw_dir = Path(cfg["raw_dir"])
@@ -24,8 +26,10 @@ class HDFSLoader(LogLoader):
         contents: list[str] = []
         blocks: list[str] = []
         no_block = 0
+        n_read = 0
         with open(raw_dir / cfg["log_file"], encoding="utf-8", errors="replace") as f:
             for i, line in enumerate(islice(f, cfg["max_lines"]), start=1):
+                n_read = i
                 m = line_re.match(line.rstrip("\r\n"))
                 if m is None:
                     raise ValueError(f"line {i}: does not match line_regex: {line[:100]!r}")
@@ -57,7 +61,12 @@ class HDFSLoader(LogLoader):
                 "timestamp": pd.to_datetime(stamps, format=cfg["timestamp_format"]),
                 "content": contents,
                 "group_id": blocks,
-                "label": [int(label_of[b]) for b in blocks],
+                "label": pd.array([label_of[b] for b in blocks], dtype="int8"),
             }
+        )
+        df = df.sort_values("timestamp", kind="stable").reset_index(drop=True)
+        extra = len(df) - (n_read - no_block)
+        logger.info(
+            "read %d raw lines, %d rows (%d extra from multi-block lines)", n_read, len(df), extra
         )
         return df[list(STANDARD_COLUMNS)]

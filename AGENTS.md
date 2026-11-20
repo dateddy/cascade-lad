@@ -66,10 +66,10 @@ Unsupervised log anomaly detection on large-scale system logs. A lightweight det
 
 ### Research invariants: never change without the user's explicit yes
 1. Splits are chronological. A random split is allowed only as a clearly labeled comparison.
-2. Templates and vocab are fit on train only. Unseen templates map to `<UNK>`.
-3. Detectors train on normal train sequences only.
+2. Vocab is built on train only; unseen template ids map to `<UNK>`. Templates come from Drain `fit_on=stream` (online, each line's id fixed when it is read; default) or `fit_on=train` (fit on the train lines the detector sees, frozen; ablation).
+3. Detectors train on normal train sequences only (`split.drop_train_anomalies: true`, default). `false` is the dirty-train ablation: a labeled exception, never the main result.
 4. Model selection (`best.pt`, early stopping) uses val loss on normal sequences. Never F1 or any metric that uses anomaly labels.
-5. Anomaly labels are used only for (a) threshold / g selection on val, with the same procedure for every method, and (b) test evaluation, run once per run after training.
+5. Anomaly labels are used only for (a) dropping anomalous sequences from train and val (invariant 3; val is normal-only by default) and (b) test evaluation, run once per run after training. Thresholds and top-g never read val or test labels (`val_percentile` default, `pot`, `flag_rate`) and use the same procedure for every method.
 6. Verifier retrieval draws only from unlabeled train windows.
 7. Every method is evaluated through `evaluation/` (same metric code, same table format).
 

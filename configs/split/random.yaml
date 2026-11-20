@@ -1,0 +1,8 @@
+# @package split
+defaults:
+  - chrono
+  - _self_
+
+name: random
+mode: random
+seed: ${seed}  # only here: chronological ignores it, so it stays out of that processed key

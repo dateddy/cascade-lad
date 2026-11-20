@@ -4,14 +4,15 @@
   "git": {
     "protected_branches": ["main"],
     "protected_commit": "ask",
-    "scopes": ["data", "parse", "models", "train", "eval", "llm", "cascade", "demo", "infra", "docs", "exp", "agent-kit"],
+    "scopes": ["data", "parse", "models", "train", "eval", "llm", "cascade", "demo", "infra", "docs", "exp", "agent-kit", "notes"],
     "strict_scopes": false,
     "max_file_mb": 5
   },
 
   "notes": {
     "dir": "notes",
-    "commit_tasks": false
+    "commit_tasks": false,
+    "base_branch": "fix/stage-1-3-protocol"
   },
 
   "context": {
@@ -20,20 +21,19 @@
   },
 
   "verify": {
+    "_comment": "Stop hook (verify.sh --hook): lint + scope only. pre-push (verify.sh --push): tests + diff-cover only.",
     "format": "uv run ruff format --check .",
     "lint": "uv run ruff check .",
     "typecheck": null,
-    "test": "uv run pytest -q"
-  },
-
-  "guards": {
-    "_comment": "Stop hook (verify.sh --hook): lint + scope only. pre-push (verify.sh --push): tests + diff-cover only.",
+    "tests": "uv run pytest -q",
+    "test": "uv run pytest -q",
+    "_test": "kept for the skill vf (skills/verifying-changes/scripts/verify.py reads verify.test only); drop when the skill copy is upgraded",
     "ruff_cmd": "uv run ruff",
     "pytest_cmd": "uv run pytest",
     "diff_cover_cmd": "uv run diff-cover",
+    "fail_under": 80,
     "hook_stages": ["lint", "scope"],
-    "push_stages": ["tests", "diff-cover"],
-    "fail_under": 80
+    "push_stages": ["tests", "diff-cover"]
   },
 
   "experiments": {
