@@ -87,23 +87,42 @@ def average_precision(y_true, scores) -> float:
     return float(np.sum(np.diff(np.r_[0.0, recall]) * precision))
 
 
-def top_k_mask(scores, rate: float) -> np.ndarray:
-    """Boolean mask of the k = ceil(rate * n) highest scores; ties go to the earlier row."""
+def _k_for_rate(n: int, rate: float) -> int:
+    """Number of windows flagged at `rate`: k = ceil(rate * n)."""
     if not 0 < rate <= 1:
         raise ValueError(f"rate must be in (0, 1], got {rate}")
+    return int(np.ceil(round(rate * n, 9)))  # round: 0.07 * 100 must give 7, not 8
+
+
+def top_k_mask(scores, rate: float) -> np.ndarray:
+    """Boolean mask of the k = ceil(rate * n) highest scores; ties go to the earlier row."""
     s = np.asarray(scores, dtype=float)
     if s.ndim != 1 or s.size == 0 or not np.isfinite(s).all():
         raise ValueError("scores must be a non-empty finite 1-D array")
-    k = int(np.ceil(round(rate * s.size, 9)))  # round: 0.07 * 100 must give 7, not 8
+    k = _k_for_rate(s.size, rate)
     mask = np.zeros(s.size, dtype=bool)
     mask[np.argsort(-s, kind="stable")[:k]] = True
     return mask
 
 
 def recall_at_flag_rate(y_true, scores, rate: float) -> float:
-    """Share of anomalous windows found among the top `rate` fraction of scores."""
+    """Expected share of anomalous windows among the top k = ceil(rate * n) scores (D-09bd).
+
+    Windows scoring above the k-th highest score are flagged; the remaining slots are filled
+    from the windows tied at that score, each counting at the tied group's anomaly share
+    (the mean over random tie orders). The result does not depend on row order.
+    """
     t, s = _check_scores(y_true, scores)
-    return classification_metrics(t, top_k_mask(s, rate).astype(int))["recall"]
+    k = _k_for_rate(s.size, rate)
+    n_pos = int(t.sum())
+    if n_pos == 0:
+        return 0.0
+    cut = np.sort(s)[::-1][k - 1]  # k-th highest score
+    above = s > cut
+    tied = s == cut
+    slots = k - int(above.sum())
+    expected_tp = t[above].sum() + slots * t[tied].sum() / tied.sum()
+    return float(expected_tp / n_pos)
 
 
 # Memory bound for one block of resample indices (rows x n), not a research parameter.

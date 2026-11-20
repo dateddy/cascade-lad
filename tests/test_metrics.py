@@ -142,6 +142,36 @@ def test_recall_at_flag_rate_hand_value():
     assert recall_at_flag_rate(y_true, scores, 0.2) == pytest.approx(2 / 3)
 
 
+def test_recall_at_flag_rate_constant_scores_equals_rate():
+    # every window tied: the expected share of anomalies in any k flagged windows is k/n
+    y_true = np.array([1] * 10 + [0] * 90)  # all anomalies in the first rows (early burst)
+    for rate in (0.1, 0.2, 0.5):
+        assert recall_at_flag_rate(y_true, np.zeros(100), rate) == pytest.approx(rate, abs=1e-12)
+
+
+def test_recall_at_flag_rate_row_order_invariant():
+    rng = np.random.default_rng(4)
+    y_true = (rng.random(300) < 0.1).astype(int)
+    scores = rng.integers(0, 3, size=300).astype(float)  # heavy ties
+    perm = rng.permutation(300)
+    for rate in (0.1, 0.2):
+        assert recall_at_flag_rate(y_true, scores, rate) == pytest.approx(
+            recall_at_flag_rate(y_true[perm], scores[perm], rate), abs=1e-12
+        )
+
+
+def test_recall_at_flag_rate_partial_tie_hand_value():
+    # n=10, rate 0.3 -> k=3. One window above the tie (0.9, anomalous); 2 slots left for the
+    # tied group at 0.5 (4 windows, 1 anomalous) -> expected tp = 1 + 2 * 1/4 = 1.5
+    y_true = np.array([1, 0, 1, 0, 0, 0, 0, 0, 1, 0])
+    scores = np.array([0.9, 0.5, 0.5, 0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1])
+    assert recall_at_flag_rate(y_true, scores, 0.3) == pytest.approx(1.5 / 3, abs=1e-12)
+
+
+def test_recall_at_flag_rate_no_positives_zero():
+    assert recall_at_flag_rate(np.zeros(10, dtype=int), np.arange(10.0), 0.2) == 0.0
+
+
 @pytest.mark.parametrize("rate", [0.0, -0.1, 1.5])
 def test_rate_out_of_range_raises(rate):
     with pytest.raises(ValueError):
