@@ -116,6 +116,8 @@ These decisions come from the literature review (Le & Zhang 2022, LogLLM 2025, R
 - **S4-5** Bootstrap CI with a fixed seed is deterministic and satisfies lower ≤ point estimate ≤ upper.
 - **S4-6** The metric table matches a stored snapshot and prints in the agreed format.
 
+**Decisions (Stage 4):** AU-PR in numpy, sklearn dev-only (D-f043); table format (D-c59c); parameters in `configs/evaluation/default.yaml` (D-9318); percentile bootstrap CI without clamping (D-bd43); `recall_at_flag_rate` flags `ceil(rate * n)` windows, ties by row order (D-a7b6); the paired bootstrap of the F1 difference (spec 4.4) is implemented here in `metrics.py` (D-e726); multi-seed std uses ddof=1 (D-e411).
+
 ## Stage 5: Detector interface + PCA (first number)
 **Files:** `detectors/pca.py`, `detectors/always_anomaly.py`, `detectors/unseen_sequence.py`, `methods/detector_only.py` (score, then threshold), `evaluation/thresholds.py`, `configs/threshold/{val_percentile,pot,flag_rate}.yaml`, `scripts/evaluate.py`, `configs/model/pca.yaml`, `configs/experiment/baseline_hdfs_pca.yaml`.
 
