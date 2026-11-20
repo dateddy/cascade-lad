@@ -119,3 +119,7 @@ Why: User 2026-11-20: spec 4.4 needs it for the minimum bar; avoids reopening me
 ## D-e411 · 2026-11-20 · evaluation · feat/stage-4-evaluation
 Multi-seed tables use sample std (ddof=1); a single seed prints the value without +-.
 Why: User 2026-11-20: standard for 3 seeds; config key evaluation.std_ddof.
+
+## D-8671 · 2026-11-20 · scope · feat/stage-4-evaluation
+.gitattributes: add 'tests/snapshots/** text eol=lf' to Stage 4 (outside the plan's Files list).
+Why: core.autocrlf=true would check the metric-table snapshot out as CRLF, and test_table_matches_snapshot compares bytes (S4-6), so it would fail on a fresh checkout.
