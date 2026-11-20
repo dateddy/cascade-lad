@@ -4,8 +4,10 @@ from sklearn import metrics as skm
 
 from cascadelad.evaluation.metrics import (
     average_precision,
+    bootstrap_ci,
     classification_metrics,
     confusion,
+    paired_bootstrap_diff,
     recall_at_flag_rate,
     top_k_mask,
 )
@@ -144,3 +146,89 @@ def test_recall_at_flag_rate_hand_value():
 def test_rate_out_of_range_raises(rate):
     with pytest.raises(ValueError):
         top_k_mask(np.arange(10.0), rate)
+
+
+def _fixture(n=500, pos=0.1, seed=3):
+    rng = np.random.default_rng(seed)
+    y_true = (rng.random(n) < pos).astype(int)
+    # a noisy detector: finds ~70% of positives, ~5% false alarms
+    y_pred = np.where(y_true == 1, rng.random(n) < 0.7, rng.random(n) < 0.05).astype(int)
+    return y_true, y_pred
+
+
+KW = {"n_resamples": 200, "seed": 0, "ci_level": 0.95}
+
+
+def test_bootstrap_deterministic_with_seed():
+    y_true, y_pred = _fixture()
+    a = bootstrap_ci(y_true, y_pred, ("f1", "recall"), **KW)
+    b = bootstrap_ci(y_true, y_pred, ("f1", "recall"), **KW)
+    assert a == b
+
+
+def test_bootstrap_different_seed_differs():
+    y_true, y_pred = _fixture()
+    a = bootstrap_ci(y_true, y_pred, ("f1",), **KW)
+    b = bootstrap_ci(y_true, y_pred, ("f1",), **{**KW, "seed": 1})
+    assert a["f1"][1:] != b["f1"][1:]
+
+
+def test_bootstrap_lower_le_point_le_upper():
+    y_true, y_pred = _fixture()
+    out = bootstrap_ci(y_true, y_pred, ("f1", "recall"), **{**KW, "n_resamples": 1000})
+    for point, lower, upper in out.values():
+        assert lower <= point <= upper
+
+
+def test_bootstrap_point_matches_classification_metrics():
+    y_true, y_pred = _fixture()
+    m = classification_metrics(y_true, y_pred)
+    out = bootstrap_ci(y_true, y_pred, ("f1", "recall", "precision", "mcc"), **KW)
+    for name in out:
+        assert out[name][0] == pytest.approx(m[name], abs=1e-12)
+
+
+def test_bootstrap_resample_metrics_match_scalar_formulas():
+    # the vectorized formulas must agree with classification_metrics on every resample
+    y_true, y_pred = _fixture(n=60)
+    rng = np.random.default_rng(0)
+    idx = rng.integers(0, 60, size=(50, 60))
+    expected = [classification_metrics(y_true[i], y_pred[i])["f1"] for i in idx]
+    lo, hi = np.percentile(expected, [2.5, 97.5])
+    out = bootstrap_ci(y_true, y_pred, ("f1",), n_resamples=50, seed=0, ci_level=0.95)
+    assert out["f1"][1] == pytest.approx(lo, abs=1e-12)
+    assert out["f1"][2] == pytest.approx(hi, abs=1e-12)
+
+
+def test_bootstrap_perfect_predictor_zero_width():
+    y_true, _ = _fixture()
+    out = bootstrap_ci(y_true, y_true, ("f1", "recall"), **KW)
+    assert out["f1"] == (1.0, 1.0, 1.0)
+    assert out["recall"] == (1.0, 1.0, 1.0)
+
+
+def test_bootstrap_rejects_unknown_metric():
+    y_true, y_pred = _fixture()
+    with pytest.raises(ValueError):
+        bootstrap_ci(y_true, y_pred, ("auc",), **KW)
+
+
+def test_paired_diff_identical_systems_is_zero():
+    y_true, y_pred = _fixture()
+    assert paired_bootstrap_diff(y_true, y_pred, y_pred, "f1", **KW) == (0.0, 0.0, 0.0)
+
+
+def test_paired_diff_better_system_positive_interval():
+    y_true, y_pred = _fixture(n=2000)
+    rng = np.random.default_rng(9)
+    worse = np.where(rng.random(2000) < 0.5, 1 - y_true, y_true)  # flips half the labels
+    point, lower, upper = paired_bootstrap_diff(y_true, y_pred, worse, "f1", **KW)
+    assert point > 0
+    assert lower > 0  # interval excludes 0
+    assert lower <= point <= upper
+
+
+def test_paired_diff_rejects_length_mismatch():
+    y_true, y_pred = _fixture()
+    with pytest.raises(ValueError):
+        paired_bootstrap_diff(y_true, y_pred, y_pred[:-1], "f1", **KW)

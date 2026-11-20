@@ -104,3 +104,117 @@ def recall_at_flag_rate(y_true, scores, rate: float) -> float:
     """Share of anomalous windows found among the top `rate` fraction of scores."""
     t, s = _check_scores(y_true, scores)
     return classification_metrics(t, top_k_mask(s, rate).astype(int))["recall"]
+
+
+# Memory bound for one block of resample indices (rows x n), not a research parameter.
+_MAX_INDEX_CELLS = 10_000_000
+_BOOTSTRAP_METRICS = ("precision", "recall", "f1", "specificity", "mcc")
+
+
+def _safe_div(num: np.ndarray, den: np.ndarray) -> np.ndarray:
+    return np.divide(num, den, out=np.zeros(np.shape(num), dtype=float), where=den != 0)
+
+
+def _metric_from_counts(name: str, tp, fp, fn, tn) -> np.ndarray:
+    """Vectorized twin of classification_metrics for many resamples; 0/0 gives 0.0."""
+    tp, fp, fn, tn = (np.asarray(x, dtype=float) for x in (tp, fp, fn, tn))
+    precision = _safe_div(tp, tp + fp)
+    recall = _safe_div(tp, tp + fn)
+    if name == "precision":
+        return precision
+    if name == "recall":
+        return recall
+    if name == "f1":
+        return _safe_div(2 * precision * recall, precision + recall)
+    if name == "specificity":
+        return _safe_div(tn, tn + fp)
+    if name == "mcc":
+        return _safe_div(tp * tn - fp * fn, np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)))
+    raise ValueError(f"unknown metric {name!r}; choose from {_BOOTSTRAP_METRICS}")
+
+
+def _check_bootstrap_args(n_resamples: int, ci_level: float, names) -> None:
+    if n_resamples < 1:
+        raise ValueError(f"n_resamples must be >= 1, got {n_resamples}")
+    if not 0 < ci_level < 1:
+        raise ValueError(f"ci_level must be in (0, 1), got {ci_level}")
+    for name in names:
+        if name not in _BOOTSTRAP_METRICS:
+            raise ValueError(f"unknown metric {name!r}; choose from {_BOOTSTRAP_METRICS}")
+
+
+def _resampled_counts(t: np.ndarray, preds: list[np.ndarray], n_resamples: int, seed: int):
+    """Per prediction vector, a (4, n_resamples) array of tp, fp, fn, tn on bootstrap resamples.
+
+    One index matrix is drawn per block and applied to every prediction vector, so systems
+    compared in a paired bootstrap see exactly the same resampled windows.
+    """
+    rng = np.random.default_rng(seed)
+    n = t.size
+    block = max(1, _MAX_INDEX_CELLS // n)
+    out = [np.empty((4, n_resamples)) for _ in preds]
+    for start in range(0, n_resamples, block):
+        stop = min(start + block, n_resamples)
+        idx = rng.integers(0, n, size=(stop - start, n))
+        tb = t[idx] == 1
+        for counts, p in zip(out, preds, strict=True):
+            pb = p[idx] == 1
+            counts[0, start:stop] = (tb & pb).sum(axis=1)
+            counts[1, start:stop] = (~tb & pb).sum(axis=1)
+            counts[2, start:stop] = (tb & ~pb).sum(axis=1)
+            counts[3, start:stop] = (~tb & ~pb).sum(axis=1)
+    return out
+
+
+def _percentile_interval(values: np.ndarray, ci_level: float) -> tuple[float, float]:
+    alpha = 1.0 - ci_level
+    lower, upper = np.percentile(values, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return float(lower), float(upper)
+
+
+def bootstrap_ci(
+    y_true, y_pred, metrics: tuple[str, ...], n_resamples: int, seed: int, ci_level: float
+) -> dict[str, tuple[float, float, float]]:
+    """Percentile bootstrap CI (D-bd43): name -> (point, lower, upper).
+
+    Test windows are resampled with replacement n_resamples times; the point estimate is
+    computed on the full data and the interval is not clamped to contain it.
+    """
+    _check_bootstrap_args(n_resamples, ci_level, metrics)
+    t = _as_binary("y_true", y_true)
+    p = _as_binary("y_pred", y_pred)
+    if t.shape != p.shape:
+        raise ValueError(f"length mismatch: y_true {t.shape} vs y_pred {p.shape}")
+    point = classification_metrics(t, p)
+    (counts,) = _resampled_counts(t, [p], n_resamples, seed)
+    out = {}
+    for name in metrics:
+        lower, upper = _percentile_interval(_metric_from_counts(name, *counts), ci_level)
+        out[name] = (float(point[name]), lower, upper)
+    return out
+
+
+def paired_bootstrap_diff(
+    y_true,
+    y_pred_a,
+    y_pred_b,
+    metric: str,
+    n_resamples: int,
+    seed: int,
+    ci_level: float,
+) -> tuple[float, float, float]:
+    """Paired bootstrap of metric(a) - metric(b) on the same resampled windows (D-e726).
+
+    Returns (point, lower, upper). A difference counts as real when the interval excludes 0.
+    """
+    _check_bootstrap_args(n_resamples, ci_level, (metric,))
+    t = _as_binary("y_true", y_true)
+    a = _as_binary("y_pred_a", y_pred_a)
+    b = _as_binary("y_pred_b", y_pred_b)
+    if not t.shape == a.shape == b.shape:
+        raise ValueError(f"length mismatch: {t.shape}, {a.shape}, {b.shape}")
+    point = classification_metrics(t, a)[metric] - classification_metrics(t, b)[metric]
+    counts_a, counts_b = _resampled_counts(t, [a, b], n_resamples, seed)
+    diffs = _metric_from_counts(metric, *counts_a) - _metric_from_counts(metric, *counts_b)
+    lower, upper = _percentile_interval(diffs, ci_level)
+    return float(point), lower, upper
