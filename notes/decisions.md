@@ -91,3 +91,31 @@ Why: Merges D-2e83, D-2be2, D-e14d, D-23c3 (stale cache verified 2026-11-05; saf
 ## D-7e94 · 2026-11-19 · data · fix/stage-1-3-protocol
 max_lines defaults to null (all lines) in dataset configs; the 100k HDFS smoke slice is configs/experiment/prepare_hdfs_dev.yaml (D-c83f). [data] prints max_lines (a number or "all").
 Why: Merges D-346d and D-0d06 (done in 0695b41); remaining items are in backlog.md.
+
+## D-f043 · 2026-11-20 · evaluation · main
+AU-PR is implemented in numpy in src/; scikit-learn is a dev-only dependency used to cross-check it in tests.
+Why: User 2026-11-20: runtime code stays free of sklearn; the test still checks against the reference implementation.
+
+## D-c59c · 2026-11-20 · evaluation · main
+Metric table is Markdown with 4 decimals: header line dataset/split/seeds/threshold, columns method|P|R|F1|Spec|MCC|AU-PR|flag|R@10%|R@20%|TP|FP|FN|TN; multi-seed rows show mean ± std.
+Why: User 2026-11-20: pastes directly into results/ and run.log; spec requires every table to state dataset, split, seeds, threshold.
+
+## D-9318 · 2026-11-20 · evaluation · main
+Evaluation parameters (bootstrap n_resamples, seed, CI level, flag rates) live in a new Hydra group configs/evaluation/default.yaml.
+Why: User 2026-11-20: no magic numbers in code.
+
+## D-bd43 · 2026-11-20 · evaluation · feat/stage-4-evaluation
+Bootstrap CI uses the plain percentile method (2.5/97.5 quantiles of resampled metrics), point estimate from the full test set, no clamping.
+Why: User 2026-11-20: simplest honest method; S4-5 is checked on a fixture.
+
+## D-a7b6 · 2026-11-20 · evaluation · feat/stage-4-evaluation
+recall_at_flag_rate flags k=ceil(rate*n) windows; ties broken by stable sort (earlier row wins), so exactly k are flagged.
+Why: User 2026-11-20: deterministic and keeps S4-4 exact when scores tie (0/1 scores).
+
+## D-e726 · 2026-11-20 · evaluation · feat/stage-4-evaluation
+Paired bootstrap of the F1 difference between two systems is implemented in Stage 4 (metrics.py), not deferred.
+Why: User 2026-11-20: spec 4.4 needs it for the minimum bar; avoids reopening metrics.py later.
+
+## D-e411 · 2026-11-20 · evaluation · feat/stage-4-evaluation
+Multi-seed tables use sample std (ddof=1); a single seed prints the value without +-.
+Why: User 2026-11-20: standard for 3 seeds; config key evaluation.std_ddof.
