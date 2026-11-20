@@ -5,7 +5,7 @@ commit; do not add a decision for that. A new rule found while doing an item goe
 Source IDs point to decisions-archive.md unless they are still in decisions.md.
 
 ## Before Stage 5
-- [ ] Merge `fix/stage-1-3-protocol` into `main` (docs/plan.md; `main` is protected: ask first).
+- [x] Merge `fix/stage-1-3-protocol` into `main`. (e8837b7)
 - [ ] `load_split(dir, name)` in `src/cascadelad/data/`: reads a processed parquet and turns `event_ids` into `list[int]`, with a test; every consumer of processed data uses it. Detector contract stays `list[int]`. (D-c9f0: `read_parquet` returns numpy arrays, `arr + [0, 0]` adds instead of padding.)
 
 ## G1: loader and prepare checks (D-d7e1)
