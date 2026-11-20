@@ -3,10 +3,23 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cascadelad.evaluation.metrics import classification_metrics, recall_at_flag_rate
-from cascadelad.evaluation.report import evaluate, format_table
+from cascadelad.evaluation.metrics import (
+    bootstrap_ci,
+    classification_metrics,
+    recall_at_flag_rate,
+    resolve_block_length,
+)
+from cascadelad.evaluation.report import evaluate, format_ci_table, format_table
 
 SNAPSHOT = Path(__file__).parent / "snapshots" / "metric_table.md"
+CI_SNAPSHOT = Path(__file__).parent / "snapshots" / "ci_table.md"
+BOOT = {
+    "ci_metrics": ("f1", "recall"),
+    "n_resamples": 100,
+    "seed": 0,
+    "ci_level": 0.95,
+    "block_length": None,
+}
 KW = {
     "dataset": "hdfs",
     "split": "chrono 70/10/20",
@@ -97,16 +110,72 @@ def test_evaluate_keys_and_values():
     y_true = np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 1])
     y_pred = np.array([1, 0, 0, 0, 0, 1, 0, 0, 0, 1])
     scores = np.array([0.9, 0.1, 0.8, 0.2, 0.3, 0.1, 0.2, 0.4, 0.5, 0.6])
-    out = evaluate(y_true, y_pred, scores, flag_rates=[0.1, 0.2])
+    out = evaluate(y_true, y_pred, scores, flag_rates=[0.1, 0.2], **BOOT)
     expected = classification_metrics(y_true, y_pred)
     for key, value in expected.items():
         assert out[key] == value
-    assert set(out) == set(expected) | {"au_pr", "recall_at_10", "recall_at_20"}
+    ci_keys = {"f1_ci_low", "f1_ci_high", "recall_ci_low", "recall_ci_high", "ci_block_length"}
+    assert set(out) == set(expected) | {"au_pr", "recall_at_10", "recall_at_20"} | ci_keys
     assert out["recall_at_20"] == recall_at_flag_rate(y_true, scores, 0.2)
 
 
 def test_evaluate_without_scores_gives_nan_score_metrics():
-    out = evaluate(np.array([1, 0]), np.array([1, 0]), None, flag_rates=[0.5])
+    out = evaluate(np.array([1, 0]), np.array([1, 0]), None, flag_rates=[0.5], **BOOT)
     assert np.isnan(out["au_pr"])
     assert np.isnan(out["recall_at_50"])
     assert out["f1"] == pytest.approx(1.0)
+
+
+def test_evaluate_ci_keys_match_bootstrap_ci():
+    rng = np.random.default_rng(2)
+    y_true = (rng.random(300) < 0.2).astype(int)
+    y_pred = np.where(y_true == 1, rng.random(300) < 0.7, rng.random(300) < 0.1).astype(int)
+    out = evaluate(y_true, y_pred, None, flag_rates=[], **BOOT)
+    ci = bootstrap_ci(
+        y_true,
+        y_pred,
+        BOOT["ci_metrics"],
+        n_resamples=BOOT["n_resamples"],
+        seed=BOOT["seed"],
+        ci_level=BOOT["ci_level"],
+        block_length=BOOT["block_length"],
+    )
+    for name, (_, lower, upper) in ci.items():
+        assert out[f"{name}_ci_low"] == lower
+        assert out[f"{name}_ci_high"] == upper
+    assert out["ci_block_length"] == resolve_block_length(300, None) == 7
+
+
+def _ci_run(f1: float, lo: float, hi: float) -> dict:
+    return {
+        "f1": f1, "f1_ci_low": lo, "f1_ci_high": hi,
+        "recall": 0.8, "recall_ci_low": 0.7, "recall_ci_high": 0.9,
+        "ci_block_length": 49,
+    }  # fmt: skip
+
+
+CI_ROWS = {
+    "always-anomaly": [_ci_run(0.1818, 0.17, 0.19)],
+    "pca": [_ci_run(0.70, 0.65, 0.75), _ci_run(0.72, 0.66, 0.77), _ci_run(0.74, 0.69, 0.79)],
+}
+CI_KW = {"dataset": "hdfs", "split": "chrono 70/10/20", "seeds": [0, 1, 2], "ci_level": 0.95,
+         "decimals": 4}  # fmt: skip
+
+
+def test_ci_table_matches_snapshot():
+    table = format_ci_table(CI_ROWS, **CI_KW)
+    assert "\r" not in table
+    assert table == CI_SNAPSHOT.read_bytes().decode("utf-8")
+
+
+def test_ci_table_one_row_per_method_and_seed():
+    lines = format_ci_table(CI_ROWS, **CI_KW).splitlines()
+    assert lines[2].startswith("| method | seed | F1 | F1 CI | R | R CI | L |")
+    assert len(lines) == 4 + 1 + 3  # header, blank, column names, rule, then rows
+    assert "| pca | 2 | 0.7400 | [0.6900, 0.7900] |" in lines[-1]
+    assert "| always-anomaly | - |" in lines[4]  # single deterministic run: no seed
+
+
+def test_ci_table_rejects_seed_count_mismatch():
+    with pytest.raises(ValueError):
+        format_ci_table({"pca": [_ci_run(0.7, 0.6, 0.8)] * 2}, **CI_KW)

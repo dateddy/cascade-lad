@@ -133,3 +133,6 @@ Supersedes: D-a7b6
 Bootstrap CI and paired bootstrap use the circular block bootstrap over test rows in stored (chronological) order; block_length null = ceil(n^(1/3)), an integer overrides, 1 = iid. The block length used is returned with the CI.
 Why: User 2026-11-20: adjacent windows are correlated (bursts), so iid resampling gives too narrow intervals and makes 'paired interval excludes 0' too easy.
 
+## D-5a19 · 2026-11-20 · evaluation · feat/stage-4-evaluation
+evaluate() returns f1/recall CI bounds (f1_ci_low, f1_ci_high, recall_ci_low, recall_ci_high, ci_block_length); the CI is shown in a separate table (format_ci_table, one row per method x seed); the main metric table and its snapshot are unchanged.
+Why: User 2026-11-20: avoids aggregating CIs across seeds; keeps D-c59c table format.

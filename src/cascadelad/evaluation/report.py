@@ -10,8 +10,10 @@ import numpy as np
 
 from cascadelad.evaluation.metrics import (
     average_precision,
+    bootstrap_ci,
     classification_metrics,
     recall_at_flag_rate,
+    resolve_block_length,
 )
 
 NA = "n/a"
@@ -26,19 +28,39 @@ _FIXED_COLUMNS = (
     ("AU-PR", "au_pr"),
     ("flag", "flag_rate"),
 )
+_SHORT = dict((key, name) for name, key in _FIXED_COLUMNS)
+NO_SEED = "-"
 
 
 def _rate_key(rate: float) -> str:
     return f"recall_at_{round(rate * 100)}"
 
 
-def evaluate(y_true, y_pred, scores, flag_rates: Sequence[float]) -> dict[str, float | int]:
-    """Classification metrics plus AU-PR and recall at each flag rate.
+def evaluate(
+    y_true,
+    y_pred,
+    scores,
+    flag_rates: Sequence[float],
+    *,
+    ci_metrics: Sequence[str],
+    n_resamples: int,
+    seed: int,
+    ci_level: float,
+    block_length: int | None,
+) -> dict[str, float | int]:
+    """Classification metrics, bootstrap CIs, AU-PR and recall at each flag rate.
 
-    `scores` may be None for methods without a continuous score; the score-based entries
-    are then nan. This is the only function that turns labels into metrics for a run.
+    Each metric in `ci_metrics` gets `<m>_ci_low` / `<m>_ci_high` from the circular block
+    bootstrap, and `ci_block_length` records the block length used (D-5a19). `scores` may be
+    None for methods without a continuous score; the score-based entries are then nan.
+    This is the only function that turns labels into metrics for a run.
     """
-    out = dict(classification_metrics(y_true, y_pred))
+    out: dict[str, float | int] = dict(classification_metrics(y_true, y_pred))
+    ci = bootstrap_ci(y_true, y_pred, tuple(ci_metrics), n_resamples, seed, ci_level, block_length)
+    for name, (_, lower, upper) in ci.items():
+        out[f"{name}_ci_low"] = lower
+        out[f"{name}_ci_high"] = upper
+    out["ci_block_length"] = resolve_block_length(int(out["n"]), block_length)
     if scores is None:
         out["au_pr"] = float("nan")
         out.update({_rate_key(r): float("nan") for r in flag_rates})
@@ -98,4 +120,54 @@ def format_table(
             for _, key in columns
         ]
         lines.append("| " + " | ".join([method, *cells]) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def _ci_metric_keys(rows: dict[str, list[dict]]) -> list[str]:
+    """Metrics with a CI, in the order evaluate() wrote them (= evaluation.bootstrap.metrics)."""
+    keys = [k.removesuffix("_ci_low") for runs in rows.values() for run in runs for k in run
+            if k.endswith("_ci_low")]  # fmt: skip
+    return list(dict.fromkeys(keys))
+
+
+def format_ci_table(
+    rows: dict[str, list[dict]],
+    *,
+    dataset: str,
+    split: str,
+    seeds: Sequence[int],
+    ci_level: float,
+    decimals: int,
+) -> str:
+    """Markdown CI table (D-5a19): one row per method and seed, never aggregated over seeds.
+
+    A method maps to one metric dict per seed (aligned with `seeds`), or to a single dict
+    for a deterministic method, printed with seed "-".
+    """
+    names = _ci_metric_keys(rows)
+    header = ["method", "seed"]
+    for key in names:
+        header += [_SHORT[key], f"{_SHORT[key]} CI"]
+    header.append("L")
+    lines = [
+        f"dataset: {dataset} | split: {split} | seeds: {','.join(map(str, seeds))}"
+        f" | ci: {ci_level:.0%} circular block bootstrap",
+        "",
+        "| " + " | ".join(header) + " |",
+        "|" + "|".join(["---", "---:", *["---:"] * (len(header) - 2)]) + "|",
+    ]
+    for method, runs in rows.items():
+        if len(runs) == 1:
+            labels = [NO_SEED]
+        elif len(runs) == len(seeds):
+            labels = [str(seed) for seed in seeds]
+        else:
+            raise ValueError(f"{method}: {len(runs)} runs for {len(seeds)} seeds")
+        for label, run in zip(labels, runs, strict=True):
+            cells = [method, label]
+            for key in names:
+                lo, hi = run[f"{key}_ci_low"], run[f"{key}_ci_high"]
+                cells += [f"{run[key]:.{decimals}f}", f"[{lo:.{decimals}f}, {hi:.{decimals}f}]"]
+            cells.append(str(int(run["ci_block_length"])))
+            lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
