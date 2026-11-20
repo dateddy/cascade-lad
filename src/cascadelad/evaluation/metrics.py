@@ -125,7 +125,7 @@ def recall_at_flag_rate(y_true, scores, rate: float) -> float:
     return float(expected_tp / n_pos)
 
 
-# Memory bound for one block of resample indices (rows x n), not a research parameter.
+# Memory bound for one chunk of resample indices (rows x n), not a research parameter.
 _MAX_INDEX_CELLS = 10_000_000
 _BOOTSTRAP_METRICS = ("precision", "recall", "f1", "specificity", "mcc")
 
@@ -162,19 +162,46 @@ def _check_bootstrap_args(n_resamples: int, ci_level: float, names) -> None:
             raise ValueError(f"unknown metric {name!r}; choose from {_BOOTSTRAP_METRICS}")
 
 
-def _resampled_counts(t: np.ndarray, preds: list[np.ndarray], n_resamples: int, seed: int):
+def resolve_block_length(n: int, block_length: int | None) -> int:
+    """Block length L for the circular block bootstrap (D-b6c5).
+
+    None gives ceil(n ** (1/3)); an integer must lie in [1, n]. L = 1 is the iid bootstrap.
+    """
+    if block_length is None:
+        return int(np.ceil(round(n ** (1 / 3), 9)))  # round: 1000 ** (1/3) must give 10
+    if not 1 <= block_length <= n:
+        raise ValueError(f"block_length must be in [1, {n}], got {block_length}")
+    return int(block_length)
+
+
+def _block_indices(rng: np.random.Generator, n: int, block_length: int, rows: int) -> np.ndarray:
+    """(rows, n) resample indices: blocks of `block_length` consecutive rows, wrapping at n.
+
+    Each row joins ceil(n / L) blocks with uniform random starts and is cut to n indices.
+    With L = 1 this is exactly rng.integers(0, n, size=(rows, n)), the iid bootstrap.
+    """
+    n_blocks = -(-n // block_length)
+    starts = rng.integers(0, n, size=(rows, n_blocks))
+    idx = (starts[:, :, None] + np.arange(block_length)) % n
+    return idx.reshape(rows, n_blocks * block_length)[:, :n]
+
+
+def _resampled_counts(
+    t: np.ndarray, preds: list[np.ndarray], n_resamples: int, seed: int, block_length: int
+):
     """Per prediction vector, a (4, n_resamples) array of tp, fp, fn, tn on bootstrap resamples.
 
-    One index matrix is drawn per block and applied to every prediction vector, so systems
+    Rows are taken in their stored (chronological) order and resampled in circular blocks.
+    One index matrix is drawn per chunk and applied to every prediction vector, so systems
     compared in a paired bootstrap see exactly the same resampled windows.
     """
     rng = np.random.default_rng(seed)
     n = t.size
-    block = max(1, _MAX_INDEX_CELLS // n)
+    chunk = max(1, _MAX_INDEX_CELLS // (n + block_length))  # resamples per index matrix
     out = [np.empty((4, n_resamples)) for _ in preds]
-    for start in range(0, n_resamples, block):
-        stop = min(start + block, n_resamples)
-        idx = rng.integers(0, n, size=(stop - start, n))
+    for start in range(0, n_resamples, chunk):
+        stop = min(start + chunk, n_resamples)
+        idx = _block_indices(rng, n, block_length, stop - start)
         tb = t[idx] == 1
         for counts, p in zip(out, preds, strict=True):
             pb = p[idx] == 1
@@ -192,11 +219,18 @@ def _percentile_interval(values: np.ndarray, ci_level: float) -> tuple[float, fl
 
 
 def bootstrap_ci(
-    y_true, y_pred, metrics: tuple[str, ...], n_resamples: int, seed: int, ci_level: float
+    y_true,
+    y_pred,
+    metrics: tuple[str, ...],
+    n_resamples: int,
+    seed: int,
+    ci_level: float,
+    block_length: int | None,
 ) -> dict[str, tuple[float, float, float]]:
-    """Percentile bootstrap CI (D-bd43): name -> (point, lower, upper).
+    """Percentile circular block bootstrap CI (D-bd43, D-b6c5): name -> (point, lower, upper).
 
-    Test windows are resampled with replacement n_resamples times; the point estimate is
+    Test windows, in stored chronological order, are resampled n_resamples times in circular
+    blocks of `block_length` rows (None = ceil(n ** (1/3)), 1 = iid). The point estimate is
     computed on the full data and the interval is not clamped to contain it.
     """
     _check_bootstrap_args(n_resamples, ci_level, metrics)
@@ -205,7 +239,8 @@ def bootstrap_ci(
     if t.shape != p.shape:
         raise ValueError(f"length mismatch: y_true {t.shape} vs y_pred {p.shape}")
     point = classification_metrics(t, p)
-    (counts,) = _resampled_counts(t, [p], n_resamples, seed)
+    length = resolve_block_length(t.size, block_length)
+    (counts,) = _resampled_counts(t, [p], n_resamples, seed, length)
     out = {}
     for name in metrics:
         lower, upper = _percentile_interval(_metric_from_counts(name, *counts), ci_level)
@@ -221,8 +256,11 @@ def paired_bootstrap_diff(
     n_resamples: int,
     seed: int,
     ci_level: float,
+    block_length: int | None,
 ) -> tuple[float, float, float]:
-    """Paired bootstrap of metric(a) - metric(b) on the same resampled windows (D-e726).
+    """Paired circular block bootstrap of metric(a) - metric(b) (D-e726, D-b6c5).
+
+    Both systems are scored on the same resampled windows; `block_length` as in bootstrap_ci.
 
     Returns (point, lower, upper). A difference counts as real when the interval excludes 0.
     """
@@ -233,7 +271,8 @@ def paired_bootstrap_diff(
     if not t.shape == a.shape == b.shape:
         raise ValueError(f"length mismatch: {t.shape}, {a.shape}, {b.shape}")
     point = classification_metrics(t, a)[metric] - classification_metrics(t, b)[metric]
-    counts_a, counts_b = _resampled_counts(t, [a, b], n_resamples, seed)
+    length = resolve_block_length(t.size, block_length)
+    counts_a, counts_b = _resampled_counts(t, [a, b], n_resamples, seed, length)
     diffs = _metric_from_counts(metric, *counts_a) - _metric_from_counts(metric, *counts_b)
     lower, upper = _percentile_interval(diffs, ci_level)
     return float(point), lower, upper

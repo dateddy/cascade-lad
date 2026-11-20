@@ -3,12 +3,14 @@ import pytest
 from sklearn import metrics as skm
 
 from cascadelad.evaluation.metrics import (
+    _block_indices,
     average_precision,
     bootstrap_ci,
     classification_metrics,
     confusion,
     paired_bootstrap_diff,
     recall_at_flag_rate,
+    resolve_block_length,
     top_k_mask,
 )
 
@@ -186,7 +188,7 @@ def _fixture(n=500, pos=0.1, seed=3):
     return y_true, y_pred
 
 
-KW = {"n_resamples": 200, "seed": 0, "ci_level": 0.95}
+KW = {"n_resamples": 200, "seed": 0, "ci_level": 0.95, "block_length": None}
 
 
 def test_bootstrap_deterministic_with_seed():
@@ -225,7 +227,9 @@ def test_bootstrap_resample_metrics_match_scalar_formulas():
     idx = rng.integers(0, 60, size=(50, 60))
     expected = [classification_metrics(y_true[i], y_pred[i])["f1"] for i in idx]
     lo, hi = np.percentile(expected, [2.5, 97.5])
-    out = bootstrap_ci(y_true, y_pred, ("f1",), n_resamples=50, seed=0, ci_level=0.95)
+    out = bootstrap_ci(
+        y_true, y_pred, ("f1",), n_resamples=50, seed=0, ci_level=0.95, block_length=1
+    )
     assert out["f1"][1] == pytest.approx(lo, abs=1e-12)
     assert out["f1"][2] == pytest.approx(hi, abs=1e-12)
 
@@ -262,3 +266,52 @@ def test_paired_diff_rejects_length_mismatch():
     y_true, y_pred = _fixture()
     with pytest.raises(ValueError):
         paired_bootstrap_diff(y_true, y_pred, y_pred[:-1], "f1", **KW)
+
+
+@pytest.mark.parametrize(("n", "expected"), [(115_013, 49), (9_427, 22), (1_000, 10), (1_001, 11)])
+def test_resolve_block_length_auto(n, expected):
+    assert resolve_block_length(n, None) == expected
+
+
+def test_resolve_block_length_explicit():
+    assert resolve_block_length(100, 7) == 7
+
+
+@pytest.mark.parametrize("block_length", [0, -1, 11])
+def test_resolve_block_length_rejects_out_of_range(block_length):
+    with pytest.raises(ValueError):
+        resolve_block_length(10, block_length)
+
+
+def test_block_indices_contiguous_circular():
+    idx = _block_indices(np.random.default_rng(0), n=10, block_length=4, rows=20)
+    assert idx.shape == (20, 10)
+    for row in idx:
+        for start in range(0, 10, 4):  # blocks begin at columns 0, 4, 8 (last one cut to 2)
+            block = row[start : start + 4]
+            assert np.array_equal(np.diff(block) % 10, np.ones(len(block) - 1))
+
+
+def test_block_length_one_equals_iid():
+    idx = _block_indices(np.random.default_rng(5), n=30, block_length=1, rows=7)
+    assert np.array_equal(idx, np.random.default_rng(5).integers(0, 30, size=(7, 30)))
+
+
+def test_block_ci_wider_on_bursty_errors():
+    # anomalies come in bursts of 40 windows and the detector misses whole bursts:
+    # neighbouring windows are correlated, so the block CI must be wider than the iid CI
+    rng = np.random.default_rng(11)
+    bursts = rng.random(100) < 0.3
+    y_true = np.repeat(bursts, 40).astype(int)
+    caught = np.repeat(rng.random(100) < 0.6, 40)
+    y_pred = (y_true.astype(bool) & caught).astype(int)
+    kw = {"n_resamples": 500, "seed": 0, "ci_level": 0.95}
+    _, lo_iid, hi_iid = bootstrap_ci(y_true, y_pred, ("recall",), **kw, block_length=1)["recall"]
+    _, lo_blk, hi_blk = bootstrap_ci(y_true, y_pred, ("recall",), **kw, block_length=40)["recall"]
+    assert hi_blk - lo_blk > 2 * (hi_iid - lo_iid)
+
+
+def test_paired_diff_block_identical_systems_is_zero():
+    y_true, y_pred = _fixture()
+    out = paired_bootstrap_diff(y_true, y_pred, y_pred, "f1", **{**KW, "block_length": 25})
+    assert out == (0.0, 0.0, 0.0)

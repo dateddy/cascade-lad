@@ -129,3 +129,7 @@ recall_at_flag_rate uses tie-aware expected recall: k=ceil(rate*n); windows scor
 Why: User 2026-11-20: row-order tie-breaking biased discrete-score baselines; on full HDFS test always-anomaly R@10% was 0.2113 by row order vs 0.1000 expected.
 Supersedes: D-a7b6
 
+## D-b6c5 · 2026-11-20 · evaluation · feat/stage-4-evaluation
+Bootstrap CI and paired bootstrap use the circular block bootstrap over test rows in stored (chronological) order; block_length null = ceil(n^(1/3)), an integer overrides, 1 = iid. The block length used is returned with the CI.
+Why: User 2026-11-20: adjacent windows are correlated (bursts), so iid resampling gives too narrow intervals and makes 'paired interval excludes 0' too easy.
+
