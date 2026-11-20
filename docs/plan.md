@@ -106,15 +106,17 @@ These decisions come from the literature review (Le & Zhang 2022, LogLLM 2025, R
 ## Stage 4: Evaluation module
 **Files:** `evaluation/metrics.py`, `evaluation/report.py` (shared metric table), `evaluation/cost.py` (timers; token counting later), `tests/test_metrics.py`.
 
-**Metrics:** TP/FP/FN/TN, precision, recall, F1, specificity, MCC, AU-PR (from scores), flag rate, recall at flag rate 10% and 20%, bootstrap 95% CI for F1 and recall (1,000 resamples, fixed seed).
+**Metrics:** TP/FP/FN/TN, precision, recall, F1, specificity, MCC, AU-PR (from scores), flag rate, recall at flag rate 10% and 20%, circular block bootstrap 95% CI for F1 and recall (1,000 resamples, fixed seed, block length ceil(n^(1/3)) by default), shown in a separate CI table.
 
 **Done when:**
 - **S4-1** On hand-made arrays, TP/FP/FN/TN, precision, recall, F1, specificity and MCC match hand-computed values to 1e-9; TP+FP+FN+TN = n.
 - **S4-2** Edge cases do not raise: no positive predictions → precision = 0, recall = 0; all-positive predictions → specificity = 0.
 - **S4-3** AU-PR equals `sklearn.metrics.average_precision_score` on random scores.
-- **S4-4** `flag_rate` = predicted positives / n; `recall_at_flag_rate(0.1)` flags exactly the top 10% of scores.
+- **S4-4** `flag_rate` = predicted positives / n; `recall_at_flag_rate` uses tie-aware expected recall over the top `ceil(rate * n)` scores, so it does not depend on row order and constant scores give recall = rate.
 - **S4-5** Bootstrap CI with a fixed seed is deterministic and satisfies lower ≤ point estimate ≤ upper.
 - **S4-6** The metric table matches a stored snapshot and prints in the agreed format.
+
+**Decisions (Stage 4):** AU-PR in numpy, sklearn dev-only (D-f043); table format (D-c59c); parameters in `configs/evaluation/default.yaml` (D-9318); percentile bootstrap CI without clamping (D-bd43), resampled in circular blocks over the chronological test order (D-b6c5); `recall_at_flag_rate` is the tie-aware expected recall over `ceil(rate * n)` windows (D-09bd, replaces D-a7b6); CI keys in `evaluate()` and a separate CI table (D-5a19); the paired bootstrap of the F1 difference (spec 4.4) is implemented here in `metrics.py` (D-e726); multi-seed std uses ddof=1 (D-e411).
 
 ## Stage 5: Detector interface + PCA (first number)
 **Files:** `detectors/pca.py`, `detectors/always_anomaly.py`, `detectors/unseen_sequence.py`, `methods/detector_only.py` (score, then threshold), `evaluation/thresholds.py`, `configs/threshold/{val_percentile,pot,flag_rate}.yaml`, `scripts/evaluate.py`, `configs/model/pca.yaml`, `configs/experiment/baseline_hdfs_pca.yaml`.
