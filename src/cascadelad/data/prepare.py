@@ -19,6 +19,7 @@ from cascadelad.utils.run import log_section
 
 SPLITS = ("train", "val", "test")
 OUT_COLUMNS = ["group_id", "event_ids", "timestamp", "label", "line_labels", "line_pos"]
+LIST_COLUMNS = ("event_ids", "line_labels", "line_pos")  # per-line lists, one cell per window
 OUT_FILES = (*(f"{s}.parquet" for s in SPLITS), "vocab.json", "meta.json")
 HASH_CHUNK_BYTES = 1 << 20
 BUILD_STATS = (
@@ -94,13 +95,33 @@ def anomaly_count(labels: pd.Series) -> str:
     return f"{n} ({100 * n / len(labels):.2f}%)"
 
 
+def load_split(processed_dir: Path, name: str) -> pd.DataFrame:
+    """Read one processed split with its list columns as list[int].
+
+    pd.read_parquet returns list cells as numpy arrays, where `arr + [0, 0]` adds elementwise
+    instead of padding (D-c9f0). Row order is the file's: (timestamp, group_id) chronological.
+    """
+    if name not in SPLITS:
+        raise ValueError(f"unknown split {name!r}, expected one of {SPLITS}")
+    path = Path(processed_dir) / f"{name}.parquet"
+    if not path.exists():
+        raise FileNotFoundError(f"processed split not found: {path}")
+    df = pd.read_parquet(path)
+    missing = [c for c in OUT_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"{path}: missing columns {missing}, expected {OUT_COLUMNS}")
+    for col in LIST_COLUMNS:
+        df[col] = [[int(x) for x in cell] for cell in df[col]]
+    return df
+
+
 def _hit_stats(cfg: Mapping, key: str, out_dir: Path) -> dict:
     """[data] stats of this run on a cache hit, recomputed from the cached files.
 
     Build-time counts (purged, anomalous dropped) are not in the outputs, so they come from
     meta.json, which is written with the outputs, and are labeled "(from build)".
     """
-    frames = {s: pd.read_parquet(out_dir / f"{s}.parquet") for s in SPLITS}
+    frames = {s: load_split(out_dir, s) for s in SPLITS}
     vocab = Vocab.from_json(out_dir / "vocab.json")
     test_ids = [e for ids in frames["test"]["event_ids"] for e in ids]
     build = json.loads((out_dir / "meta.json").read_text(encoding="utf-8"))["stats"]

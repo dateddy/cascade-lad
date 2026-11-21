@@ -83,6 +83,7 @@ def write_split(
             "group_id": [r[0] for r in test_rows],
             "event_ids": [r[1] for r in test_rows],
             "line_pos": [r[2] for r in test_rows],
+            "line_labels": [[0] * len(r[1]) for r in test_rows],
             "timestamp": pd.Timestamp("2020-01-01"),
             "label": 0,
         }

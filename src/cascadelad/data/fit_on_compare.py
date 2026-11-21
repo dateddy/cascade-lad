@@ -10,7 +10,7 @@ import pandas as pd
 
 from cascadelad.data.loaders import get_loader
 from cascadelad.data.parsing import DrainParser
-from cascadelad.data.prepare import prepare
+from cascadelad.data.prepare import load_split, prepare
 from cascadelad.data.vocab import Vocab
 from cascadelad.utils.run import log_section
 
@@ -28,7 +28,7 @@ def prefix_mismatches(contents: Sequence[str], cfg: Mapping, train_ratio: float)
 
 def _lines(out_dir: Path, split: str) -> tuple[pd.DataFrame, Vocab]:
     """One row per line of `split`: group_id, line_pos, event_id (vocab id)."""
-    df = pd.read_parquet(out_dir / f"{split}.parquet")
+    df = load_split(out_dir, split)
     lines = df[[*KEY, "event_ids"]].explode(["line_pos", "event_ids"])
     lines = lines.rename(columns={"event_ids": "event_id"}).astype({"line_pos": "int64"})
     lines["event_id"] = lines["event_id"].astype("int64")
