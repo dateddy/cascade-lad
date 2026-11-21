@@ -170,7 +170,7 @@ Dataset statistics and known issues are in Section 5.
 - Counts TP, FP, FN, TN, always reported next to percentages.
 - Precision, recall, F1, specificity (TN / (TN + FP)) and MCC.
 - AU-PR for systems that output a continuous score (detectors).
-- Bootstrap 95% confidence intervals (1,000 resamples of test sequences, fixed seed).
+- Bootstrap 95% confidence intervals for F1 and recall (1,000 resamples of test sequences, fixed seed). Adjacent test sequences are correlated (anomalies come in bursts), so resampling is a circular block bootstrap over the chronological test order [Politis & Romano, 1992], a variant of the moving block bootstrap [Künsch, 1989; Liu & Singh, 1992]; an iid bootstrap [Efron, 1979] would give intervals that are too narrow. The interval is the percentile interval [Efron & Tibshirani, 1993]. Block length is L = ⌈n^(1/3)⌉: the n^(1/3) rate is the optimal order for variance estimation [Hall, Horowitz & Jing, 1995], but the constant 1 is our convention, not taken from the literature; data-driven selection [Politis & White, 2004; Patton, Politis & White, 2009] is the alternative if L is questioned. L is reported with every interval (decision D-b6c5).
 
 **Stage 1 (detector).**
 - Realized flag rate on the test set.
@@ -223,7 +223,7 @@ Rules for reported numbers:
 - **LLM determinism.** The LLM runs once at temperature 0. A 500-sequence subset is run a second time and the label agreement between the two runs is reported.
 - **LLM-only on HDFS.** It runs on a stratified sample of 10,000 test sessions that keeps the test anomaly ratio. The cascade is reported on the same sample as well as on the full test set. The sample size may shrink if the cost estimate from BGL requires it; any change is logged.
 - **Data contamination.** For 200 lines per dataset, the LLM is given the first half of a line and asked to complete it; the exact-match rate is reported. A high rate is discussed as a threat to validity.
-- **Comparing two systems.** A difference in F1 counts as real if the 95% paired bootstrap interval of the difference, computed on the same test sequences, excludes 0.
+- **Comparing two systems.** A difference in F1 counts as real if the 95% paired bootstrap interval of the difference, computed on the same test sequences, excludes 0. The paired bootstrap follows Koehn (2004); here both systems are resampled with the same circular blocks (Section 4.2).
 
 ### 4.5 Ablations
 
@@ -664,4 +664,17 @@ Fourteen questions remain open. Each has a date or milestone by which it must be
 - Li et al. (2025). A survey of deep learning for industrial visual anomaly detection. Artificial Intelligence Review.
 - De la Cruz Cabello, Prince Sales & Machado (2025). AIOps for log anomaly detection in the era of LLMs: A systematic literature review. Intelligent Systems with Applications.
 
+**Statistics (bootstrap, Section 4.2 and 4.4).**
+- Efron (1979). Bootstrap Methods: Another Look at the Jackknife. The Annals of Statistics 7(1): 1–26. doi:10.1214/aos/1176344552.
+- Efron & Tibshirani (1993). An Introduction to the Bootstrap. Chapman & Hall.
+- Künsch (1989). The Jackknife and the Bootstrap for General Stationary Observations. The Annals of Statistics 17(3): 1217–1241. doi:10.1214/aos/1176347265.
+- Liu & Singh (1992). Moving Blocks Jackknife and Bootstrap Capture Weak Dependence. In LePage & Billard (eds.), Exploring the Limits of Bootstrap, Wiley.
+- Politis & Romano (1992). A Circular Block-Resampling Procedure for Stationary Data. In LePage & Billard (eds.), Exploring the Limits of Bootstrap, Wiley.
+- Hall, Horowitz & Jing (1995). On Blocking Rules for the Bootstrap with Dependent Data. Biometrika 82(3): 561–574. doi:10.1093/biomet/82.3.561.
+- Politis & White (2004). Automatic Block-Length Selection for the Dependent Bootstrap. Econometric Reviews 23(1): 53–70.
+- Patton, Politis & White (2009). Correction to "Automatic Block-Length Selection for the Dependent Bootstrap". Econometric Reviews 28(4): 372–375. doi:10.1080/07474930802459016.
+- Koehn (2004). Statistical Significance Tests for Machine Translation Evaluation. EMNLP, pp. 388–395 (ACL Anthology W04-3250).
+
 *Verified against the source PDF: Xu 2009, Du 2017 (Fig. 10 on BGL), Zhang 2019, Le & Zhang 2022, Liu 2023, Qi 2023, No 2023, Guan 2025, Han 2023, Zamanzadeh Darban 2024, Li 2025, De la Cruz Cabello 2025, Loghub. RAGLog checked on its arXiv page only. Meng 2019, Le & Zhang 2021, Guo 2021, He 2021 and Jiang 2024 are from memory or secondary sources; verify before submission. Myriad is cited through Li et al. (2025); read the primary source.*
+
+*Statistics references, checked 2026-11-20 by web search (bibliographic records only, no full text read). Confirmed via Project Euclid / publisher / ACL Anthology records: Efron 1979, Künsch 1989, Hall, Horowitz & Jing 1995 (venue, volume, pages, DOI), Politis & White 2004 and Patton, Politis & White 2009, Koehn 2004. To check: (a) Politis & Romano 1992 and Liu & Singh 1992 are attributed to the LePage & Billard volume by secondary sources and memory; the search confirmed the book (Wiley, 1992, ISBN 9780471536314) but not the chapter titles or pages; (b) the n^(1/3) claim for Hall et al. 1995 comes from citing reviews and the R package `blocklength`, not the paper itself; (c) Efron & Tibshirani 1993 was not searched; (d) no log anomaly detection paper using a block bootstrap for F1/recall intervals was found; nearby uses: blockwise bootstrap for ASR (arXiv:1912.09508) and paired bootstrap F1 intervals in time-series anomaly detection (arXiv:2608.24113). Claim "first in log anomaly detection" only after a systematic search.*
