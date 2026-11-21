@@ -135,6 +135,8 @@ These decisions come from the literature review (Le & Zhang 2022, LogLLM 2025, R
 - **S5-5** PCA scores are identical across two runs.
 - **S5-6** One `ex run …` command runs the whole pipeline on the 100k-line slice and writes `metrics.json` (with threshold method and value), `scores.parquet`, the metric table at the end of `run.log`, and appends exactly one line to `experiments/runs.jsonl`.
 
+**Decisions (Stage 5):** evaluation unit is the group (D-6141); trivial baselines decide by a fixed rule `score > 0.5`, `threshold_method: rule` (D-47fc); PCA input is the TF-IDF count vector, score SPE (D-58a7); POT by method of moments in numpy (D-a3c4); one `ex run` evaluates PCA plus the trivial baselines in one table, baselines under `baselines.<name>` in `metrics.json` (D-d181).
+
 ## Stage 6: DeepLog
 **Files:** `detectors/deeplog.py` (model + continuous score from the probability of the actual next key), `training/trainer.py` (loop, early stopping on val loss, `best.pt` / `last.pt`, `history.csv`, resume), `configs/model/deeplog.yaml` (defaults from the paper: h=10, g=9, 2 layers, 64 units).
 

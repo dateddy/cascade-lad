@@ -21,7 +21,7 @@ Source IDs point to decisions-archive.md unless they are still in decisions.md.
 
 ## G3: max_lines path (D-d7e1)
 - [x] `max_lines` null by default, dev slice config, `[data]` prints it. (0695b41, D-7e94)
-- [ ] Write `data.max_lines` to `metrics.json` (when `metrics.json` exists, Stage 4/5). (D-346d)
+- [x] Write `data.max_lines` to `metrics.json` (when `metrics.json` exists, Stage 4/5). (D-346d) (e6796cc)
 - [ ] Stage 7 aggregation script rejects runs with `max_lines != null`. (D-346d)
 - [ ] Loader test with `max_lines: None` reading every fixture line. (D-cd49)
 - [ ] Run the full-HDFS prepare once through `ex`, machine otherwise idle, record time and peak memory (estimate ~5.3 GB on 7.7 GB RAM: OOM risk). Only when the user says go. (D-cd49)
@@ -31,8 +31,8 @@ Source IDs point to decisions-archive.md unless they are still in decisions.md.
 - [ ] G4 run setup: A7, A8, B2, B3. G5 splitting: B4, D7. G6 Drain config: B5, D8, D9. Definitions are not in the repo. Re-audit or drop.
 
 ## Stage 4-6: decide at the stage, after explanation (D-cbb3)
-- [ ] Unit of evaluation (proposed: session).
-- [ ] PCA input (proposed: per-session template count vector).
+- [x] Unit of evaluation: the group (D-6141). (Stage 5)
+- [x] PCA input: per-group TF-IDF template count vector (D-58a7). (Stage 5)
 - [ ] DeepLog session score (proposed: max over windows of -log p(actual next key)).
 
 ## Stage 6-7
