@@ -136,3 +136,23 @@ Why: User 2026-11-20: adjacent windows are correlated (bursts), so iid resamplin
 ## D-5a19 · 2026-11-20 · evaluation · feat/stage-4-evaluation
 evaluate() returns f1/recall CI bounds (f1_ci_low, f1_ci_high, recall_ci_low, recall_ci_high, ci_block_length); the CI is shown in a separate table (format_ci_table, one row per method x seed); the main metric table and its snapshot are unchanged.
 Why: User 2026-11-20: avoids aggregating CIs across seeds; keeps D-c59c table format.
+
+## D-6141 · 2026-11-21 · evaluation · feat/stage-5-pca
+Evaluation unit is the group: session for HDFS, fixed window for BGL/Thunderbird.
+Why: User 2026-11-21: matches the processed data unit; closes backlog 'Unit of evaluation'.
+
+## D-47fc · 2026-11-21 · detectors · feat/stage-5-pca
+Trivial baselines (always_anomaly, unseen_sequence) output 0/1 scores and decide by a fixed rule score > model.rule_threshold (0.5), threshold_method=rule; PCA and later detectors use the threshold policy.
+Why: User 2026-11-21: val_percentile with s > tau flags nothing for a constant score and is meaningless for 0/1 scores; the rule reads no labels and spec 4.3 defines these baselines by the rule.
+
+## D-58a7 · 2026-11-21 · detectors · feat/stage-5-pca
+PCA (Xu 2009/loglizer): per-group template count vector, TF-IDF with idf=log((N+1)/(df+1)) on train, zero-mean on train mean, components up to 95% explained variance, score = SPE.
+Why: User 2026-11-21: comparable with loglizer-based published tables; smoothed idf stays >= 0 and gives <UNK> the largest weight; closes backlog 'PCA input'.
+
+## D-a3c4 · 2026-11-21 · evaluation · feat/stage-5-pca
+POT threshold fits the GPD to val excesses by method of moments in numpy (init_level, risk, min_excesses in configs/threshold/pot.yaml); invalid fits raise.
+Why: User 2026-11-21: no new runtime dependency (scipy).
+
+## D-d181 · 2026-11-21 · experiments · feat/stage-5-pca
+One Stage-5 ex run evaluates PCA (primary, metrics.json test.*) plus the trivial baselines (baselines.<name>.test.*) in one metric table.
+Why: User 2026-11-21: S5-6 needs exactly one runs.jsonl line and plan wants baselines in the same table.
