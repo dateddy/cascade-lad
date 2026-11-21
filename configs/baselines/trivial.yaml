@@ -1,0 +1,11 @@
+# @package baselines
+# Trivial baselines are decided by a fixed rule, not by a threshold policy (D-47fc): flagged iff
+# score > rule_threshold. The rule reads no labels.
+always_anomaly:
+  name: always_anomaly
+  decision: rule
+  rule_threshold: 0.5
+unseen_sequence:
+  name: unseen_sequence
+  decision: rule
+  rule_threshold: 0.5
