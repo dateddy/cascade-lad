@@ -6,7 +6,7 @@ Source IDs point to decisions-archive.md unless they are still in decisions.md.
 
 ## Before Stage 5
 - [x] Merge `fix/stage-1-3-protocol` into `main`. (e8837b7)
-- [ ] `load_split(dir, name)` in `src/cascadelad/data/`: reads a processed parquet and turns `event_ids` into `list[int]`, with a test; every consumer of processed data uses it. Detector contract stays `list[int]`. (D-c9f0: `read_parquet` returns numpy arrays, `arr + [0, 0]` adds instead of padding.)
+- [x] `load_split(dir, name)` in `src/cascadelad/data/`: reads a processed parquet and turns `event_ids` into `list[int]`, with a test; every consumer of processed data uses it. Detector contract stays `list[int]`. (D-c9f0: `read_parquet` returns numpy arrays, `arr + [0, 0]` adds instead of padding.) (12b2bb5)
 
 ## G1: loader and prepare checks (D-d7e1)
 - [ ] Test: a line naming the same block twice (`Deleting block blk_300 file /mnt/blk_300`) gives exactly 1 row. (D-bd28)

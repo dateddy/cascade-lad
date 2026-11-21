@@ -8,7 +8,15 @@ from omegaconf import OmegaConf
 
 from cascadelad.data import prepare as prepare_mod
 from cascadelad.data.loaders import get_loader
-from cascadelad.data.prepare import anomaly_count, prepare, processed_key
+from cascadelad.data.prepare import (
+    LIST_COLUMNS,
+    OUT_COLUMNS,
+    SPLITS,
+    anomaly_count,
+    load_split,
+    prepare,
+    processed_key,
+)
 from cascadelad.data.vocab import Vocab
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,7 +75,7 @@ def test_outputs_leakage_and_vocab(tmp_path, caplog):
         "val.parquet",
         "vocab.json",
     ]
-    train, val, test = (pd.read_parquet(out / f"{s}.parquet") for s in ("train", "val", "test"))
+    train, val, test = (load_split(out, s) for s in ("train", "val", "test"))
     for df in (train, val, test):
         assert list(df.columns) == [
             "group_id",
@@ -307,7 +315,7 @@ def test_train_ratio_change_is_parse_cache_miss(tmp_path, caplog):
 
 def test_line_pos_unique_with_group_id(tmp_path):
     out = prepare(make_cfg(tmp_path), logging.getLogger("t_pos"))
-    frames = [pd.read_parquet(out / f"{s}.parquet") for s in ("train", "val", "test")]
+    frames = [load_split(out, s) for s in ("train", "val", "test")]
     keys = []
     for df in frames:
         for gid, ids, pos in zip(df["group_id"], df["event_ids"], df["line_pos"], strict=True):
@@ -318,7 +326,7 @@ def test_line_pos_unique_with_group_id(tmp_path):
 
 
 def read_splits(out: Path) -> dict[str, pd.DataFrame]:
-    return {s: pd.read_parquet(out / f"{s}.parquet") for s in ("train", "val", "test")}
+    return {s: load_split(out, s) for s in ("train", "val", "test")}
 
 
 class FakeLoader:
@@ -457,7 +465,7 @@ def test_logged_test_unk_rate_matches_recount(tmp_path, caplog):
     out = prepare(cfg, logging.getLogger("t_unk"))
     vocab = Vocab.from_json(out / "vocab.json")
     assert vocab.token_to_id[vocab.pad_token] == 0 and vocab.token_to_id[vocab.unk_token] == 1
-    ids = [e for seq in pd.read_parquet(out / "test.parquet")["event_ids"] for e in seq]
+    ids = [e for seq in load_split(out, "test")["event_ids"] for e in seq]
     assert logged(text, "test unk rate") == f"{ids.count(vocab.unk_id) / len(ids):.4f}"
 
 
@@ -488,3 +496,54 @@ def test_data_log_prints_max_lines_slice(tmp_path, caplog):
     assert "max_lines: 1000" in run_logged(cfg, "t_ml_miss", caplog)
     hit = run_logged(cfg, "t_ml_hit", caplog)
     assert "processed cache: hit" in hit and "max_lines: 1000" in hit
+
+
+# --- load_split (D-c9f0) ---------------------------------------------------------------------
+
+
+def test_load_split_list_columns_are_int_lists(tmp_path):
+    out = prepare(make_cfg(tmp_path), logging.getLogger("t_ls1"))
+    for name in SPLITS:
+        df = load_split(out, name)
+        for col in LIST_COLUMNS:
+            for cell in df[col]:
+                assert type(cell) is list
+                assert all(type(v) is int for v in cell)
+
+
+def test_load_split_pad_appends(tmp_path):
+    """Regression: a numpy cell makes `ids + [0, 0]` add elementwise instead of padding."""
+    out = prepare(make_cfg(tmp_path), logging.getLogger("t_ls2"))
+    ids = load_split(out, "train")["event_ids"].iloc[0]
+    padded = ids + [0, 0]
+    assert len(padded) == len(ids) + 2
+    assert padded[-2:] == [0, 0]
+
+
+def test_load_split_bad_name_raises(tmp_path):
+    with pytest.raises(ValueError, match="dev"):
+        load_split(tmp_path, "dev")
+
+
+def test_load_split_missing_file_raises(tmp_path):
+    with pytest.raises(FileNotFoundError, match="train.parquet"):
+        load_split(tmp_path, "train")
+
+
+def test_load_split_missing_column_raises(tmp_path):
+    out = prepare(make_cfg(tmp_path), logging.getLogger("t_ls3"))
+    pd.read_parquet(out / "val.parquet").drop(columns=["line_labels"]).to_parquet(
+        tmp_path / "val.parquet", index=False
+    )
+    with pytest.raises(ValueError, match="line_labels"):
+        load_split(tmp_path, "val")
+
+
+def test_load_split_order_matches_read_parquet(tmp_path):
+    out = prepare(make_cfg(tmp_path), logging.getLogger("t_ls4"))
+    for name in SPLITS:
+        raw = pd.read_parquet(out / f"{name}.parquet")
+        df = load_split(out, name)
+        assert list(df.columns) == OUT_COLUMNS
+        assert df["group_id"].tolist() == raw["group_id"].tolist()
+        assert df["timestamp"].tolist() == raw["timestamp"].tolist()
