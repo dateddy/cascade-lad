@@ -119,7 +119,12 @@ These decisions come from the literature review (Le & Zhang 2022, LogLLM 2025, R
 **Decisions (Stage 4):** AU-PR in numpy, sklearn dev-only (D-f043); table format (D-c59c); parameters in `configs/evaluation/default.yaml` (D-9318); percentile bootstrap CI without clamping (D-bd43), resampled in circular blocks over the chronological test order (D-b6c5); `recall_at_flag_rate` is the tie-aware expected recall over `ceil(rate * n)` windows (D-09bd, replaces D-a7b6); CI keys in `evaluate()` and a separate CI table (D-5a19); the paired bootstrap of the F1 difference (spec 4.4) is implemented here in `metrics.py` (D-e726); multi-seed std uses ddof=1 (D-e411).
 
 ## Stage 5: Detector interface + PCA (first number)
-**Files:** `detectors/pca.py`, `detectors/always_anomaly.py`, `detectors/unseen_sequence.py`, `methods/detector_only.py` (score, then threshold), `evaluation/thresholds.py`, `configs/threshold/{val_percentile,pot,flag_rate}.yaml`, `scripts/evaluate.py`, `configs/model/pca.yaml`, `configs/experiment/baseline_hdfs_pca.yaml`.
+**Files:**
+- Detectors: `detectors/registry.py` (`register_detector`, `get_detector`), `detectors/pca.py`, `detectors/always_anomaly.py`, `detectors/unseen_sequence.py`.
+- Thresholds: `evaluation/thresholds.py` (`val_percentile`, `flag_rate`, `compute_threshold`, `apply_threshold`), `evaluation/pot.py` (registers itself in `thresholds.py`).
+- Methods: `methods/detector_only.py` (score, then threshold, then evaluate), `methods/outputs.py` (`metrics.json` dict and `scores.parquet` frame), `methods/pipeline.py` (baselines + PCA in one table; writes the run outputs).
+- Configs: `configs/threshold/{val_percentile,flag_rate,pot}.yaml`, `configs/model/pca.yaml`, `configs/baselines/trivial.yaml`, `configs/experiment/baseline_hdfs_pca.yaml`, `configs/experiment/baseline_hdfs_pca_dev.yaml` (100k-line smoke slice).
+- Entry point: `scripts/evaluate.py` (thin: config, `prepare`, `load_split`, `run_pipeline`).
 
 **Threshold policy:** `val_percentile` (default, on normal-only val), `pot`, or `flag_rate`. Threshold functions see scores only, never labels. The method and value are saved in `metrics.json`.
 
@@ -133,7 +138,7 @@ These decisions come from the literature review (Le & Zhang 2022, LogLLM 2025, R
 - **S5-3** `always_anomaly`: recall = 1 and specificity = 0 on any test set.
 - **S5-4** `unseen_sequence`: a window identical to a train window scores 0; a window with an unseen template sequence scores 1 (fixture).
 - **S5-5** PCA scores are identical across two runs.
-- **S5-6** One `ex run …` command runs the whole pipeline on the 100k-line slice and writes `metrics.json` (with threshold method and value), `scores.parquet`, the metric table at the end of `run.log`, and appends exactly one line to `experiments/runs.jsonl`.
+- **S5-6** One `ex run …` command runs the whole pipeline on the 100k-line slice and writes `metrics.json` (with threshold method and value), `scores.parquet`, the metric table in the `[eval]` section of `run.log` (followed by `[outputs]`), and appends exactly one line to `experiments/runs.jsonl`.
 
 **Decisions (Stage 5):** evaluation unit is the group (D-6141); trivial baselines decide by a fixed rule `score > 0.5`, `threshold_method: rule` (D-47fc); PCA input is the TF-IDF count vector, score SPE (D-58a7); POT by method of moments in numpy (D-a3c4); one `ex run` evaluates PCA plus the trivial baselines in one table, baselines under `baselines.<name>` in `metrics.json` (D-d181).
 
