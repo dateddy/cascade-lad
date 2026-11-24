@@ -1,0 +1,3 @@
+# @package threshold
+method: flag_rate
+rate: 0.1  # target flag rate rho; tau = (1 - rate) quantile of val scores (spec 3.5)

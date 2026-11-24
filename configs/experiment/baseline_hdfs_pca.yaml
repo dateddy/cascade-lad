@@ -1,0 +1,10 @@
+# @package _global_
+defaults:
+  - override /dataset: hdfs
+  - override /parser: drain
+  - override /split: chrono
+  - override /vocab: default
+  - override /model: pca
+  - override /baselines: trivial
+
+note: baseline_hdfs_pca

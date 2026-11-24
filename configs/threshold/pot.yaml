@@ -1,0 +1,5 @@
+# @package threshold
+method: pot
+init_level: 0.98  # quantile of val scores where the tail starts
+risk: 0.001  # target tail probability of the returned threshold
+min_excesses: 10  # fewer excesses over init_level: the GPD fit raises

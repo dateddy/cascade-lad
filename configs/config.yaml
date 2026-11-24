@@ -5,6 +5,9 @@ defaults:
   - split: null
   - vocab: null
   - evaluation: default
+  - threshold: val_percentile
+  - model: null
+  - baselines: null
   - experiment: null
   - override hydra/job_logging: none
   - override hydra/hydra_logging: none

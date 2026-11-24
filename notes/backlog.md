@@ -21,7 +21,7 @@ Source IDs point to decisions-archive.md unless they are still in decisions.md.
 
 ## G3: max_lines path (D-d7e1)
 - [x] `max_lines` null by default, dev slice config, `[data]` prints it. (0695b41, D-7e94)
-- [ ] Write `data.max_lines` to `metrics.json` (when `metrics.json` exists, Stage 4/5). (D-346d)
+- [x] Write `data.max_lines` to `metrics.json` (when `metrics.json` exists, Stage 4/5). (D-346d) (e6796cc)
 - [ ] Stage 7 aggregation script rejects runs with `max_lines != null`. (D-346d)
 - [ ] Loader test with `max_lines: None` reading every fixture line. (D-cd49)
 - [ ] Run the full-HDFS prepare once through `ex`, machine otherwise idle, record time and peak memory (estimate ~5.3 GB on 7.7 GB RAM: OOM risk). Only when the user says go. (D-cd49)
@@ -31,8 +31,8 @@ Source IDs point to decisions-archive.md unless they are still in decisions.md.
 - [ ] G4 run setup: A7, A8, B2, B3. G5 splitting: B4, D7. G6 Drain config: B5, D8, D9. Definitions are not in the repo. Re-audit or drop.
 
 ## Stage 4-6: decide at the stage, after explanation (D-cbb3)
-- [ ] Unit of evaluation (proposed: session).
-- [ ] PCA input (proposed: per-session template count vector).
+- [x] Unit of evaluation: the group (D-6141). (Stage 5)
+- [x] PCA input: per-group TF-IDF template count vector (D-58a7). (Stage 5)
 - [ ] DeepLog session score (proposed: max over windows of -log p(actual next key)).
 
 ## Stage 6-7
@@ -40,6 +40,7 @@ Source IDs point to decisions-archive.md unless they are still in decisions.md.
 - [ ] On full HDFS, correlation between `<UNK>` in a test session and its label; if present report F1 with and without `<UNK>`. RQ4 needs real log evolution (BGL or synthetic changes). (D-149b)
 - [ ] HDFS_2k: 24 of 26 test `<UNK>` are benign blk-list delete lines; consider a mask before Stage 7.
 - [ ] BGL and Thunderbird loaders (`label_granularity: "line"`, `grouping.mode: fixed`). (D-cfbf)
+- [ ] After Stage 6: choose the threshold tie rule (and POT usability) from PCA + DeepLog val scores only, one rule for all methods, fixed before Stage 7 test evaluation. Evidence: E-420b PCA val 2 distinct scores, p99 val flag 0.26%, POT n_t=1. (D-a195)
 
 ## Small, not blocking (review 2026-11-19)
 - [ ] docs/plan.md S2-5 says the key holds the "split boundary"; the code keys the fit mask (stricter). Reword.
