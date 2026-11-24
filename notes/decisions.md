@@ -156,3 +156,7 @@ Why: User 2026-11-21: no new runtime dependency (scipy).
 ## D-d181 · 2026-11-21 · experiments · feat/stage-5-pca
 One Stage-5 ex run evaluates PCA (primary, metrics.json test.*) plus the trivial baselines (baselines.<name>.test.*) in one metric table.
 Why: User 2026-11-21: S5-6 needs exactly one runs.jsonl line and plan wants baselines in the same table.
+
+## D-a195 · 2026-11-24 · evaluation · feat/stage-5-pca
+Threshold tie handling (and whether POT is usable) is decided after Stage 6, from PCA and DeepLog val-score distributions, as one label-free rule for every method; it is fixed before any full-data test evaluation in Stage 7. No full-HDFS run for POT before then.
+Why: User 2026-11-24: E-420b PCA val has 2 distinct scores, p99 flags 0.26% of val and POT gets n_t=1; choosing the rule after seeing test F1 would break invariant 5.

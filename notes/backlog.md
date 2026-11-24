@@ -40,6 +40,7 @@ Source IDs point to decisions-archive.md unless they are still in decisions.md.
 - [ ] On full HDFS, correlation between `<UNK>` in a test session and its label; if present report F1 with and without `<UNK>`. RQ4 needs real log evolution (BGL or synthetic changes). (D-149b)
 - [ ] HDFS_2k: 24 of 26 test `<UNK>` are benign blk-list delete lines; consider a mask before Stage 7.
 - [ ] BGL and Thunderbird loaders (`label_granularity: "line"`, `grouping.mode: fixed`). (D-cfbf)
+- [ ] After Stage 6: choose the threshold tie rule (and POT usability) from PCA + DeepLog val scores only, one rule for all methods, fixed before Stage 7 test evaluation. Evidence: E-420b PCA val 2 distinct scores, p99 val flag 0.26%, POT n_t=1. (D-a195)
 
 ## Small, not blocking (review 2026-11-19)
 - [ ] docs/plan.md S2-5 says the key holds the "split boundary"; the code keys the fit mask (stricter). Reword.
